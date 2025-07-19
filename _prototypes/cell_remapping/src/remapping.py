@@ -1004,17 +1004,22 @@ def compute_remapping(study, settings, data_dir):
                     # with pd.ExcelWriter(regular_path_to_use, engine='openpyxl') as writer:
                     #     df.to_excel(writer, sheet_name='Summary')
                 else:
+                    #book = load_workbook(regular_path_to_use)
+                    #sheet = book['Summary']
+                    #startrow = sheet.max_row
+                    # with pd.ExcelWriter(regular_path_to_use, engine='openpyxl', mode='a', if_sheet_exists='overlay') as writer:
+                    #     df.to_excel(writer, sheet_name='Summary', header=False, startrow=startrow)
+                    #writer = pd.ExcelWriter(regular_path_to_use, engine='openpyxl')
+                    #writer.book = book
+                    #writer.sheets = dict((ws.title, ws) for ws in book.worksheets)
+                    #df.to_excel(writer, sheet_name='Summary', header=False, startrow=writer.sheets['Summary'].max_row)
+                    #writer.close()
+                    # book.save(regular_path_to_use)
                     book = load_workbook(regular_path_to_use)
                     sheet = book['Summary']
                     startrow = sheet.max_row
-                    # with pd.ExcelWriter(regular_path_to_use, engine='openpyxl', mode='a', if_sheet_exists='overlay') as writer:
-                    #     df.to_excel(writer, sheet_name='Summary', header=False, startrow=startrow)
-                    writer = pd.ExcelWriter(regular_path_to_use, engine='openpyxl')
-                    writer.book = book
-                    writer.sheets = dict((ws.title, ws) for ws in book.worksheets)
-                    df.to_excel(writer, sheet_name='Summary', header=False, startrow=writer.sheets['Summary'].max_row)
-                    writer.close()
-                    # book.save(regular_path_to_use)
+                    with pd.ExcelWriter(regular_path_to_use, engine='openpyxl', mode='a', if_sheet_exists='overlay') as writer: df.to_excel(writer, sheet_name='Summary', header=False, startrow=startrow)
+
 
             if settings['hasObject']:
                 df = pd.DataFrame(to_save['object'])
