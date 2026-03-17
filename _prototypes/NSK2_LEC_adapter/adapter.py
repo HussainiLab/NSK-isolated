@@ -56,6 +56,10 @@ def main(study, settings_dict, output_path):
             path = ses.session_metadata.file_paths["tet"]
             fname = path.split("/")[-1].split(".")[0]
 
+            # Use ppm resolved in batch_read.make_session and attached to session metadata.
+            file_ppm = ses.session_metadata.file_paths.get("ppm")
+            # print(f"file_ppm: {file_ppm}")
+
             stim, depth, name, date = read_data_from_fname(fname, settings_dict["naming_type"], settings_dict["type"])
 
             aid = str(name) # STR
@@ -100,6 +104,8 @@ def main(study, settings_dict, output_path):
             cluster_labels = cluster_labels[non_noise_idx]
             cluster_event_times = cluster_event_times[non_noise_idx]
             spike_param_dict = spike_cluster.spikeparam
+            print(f"spike_param_dict: {spike_param_dict}")
+
             timebase = float(spike_param_dict["timebase"]) # FLOAT
             bytes_per_sample = float(spike_param_dict["bytes_per_sample"]) # FLOAT
             samples_per_spike = float(spike_param_dict["samples_per_spike"]) # FLOAT
@@ -114,6 +120,8 @@ def main(study, settings_dict, output_path):
             ses_pos_name = str(aid) + '_' + str(date) + "_" + str(trial_time_without_colon) # without tet id
 
             t, x, y, arena_height, arena_width = pos_obj.t, pos_obj.x, pos_obj.y, pos_obj.arena_height, pos_obj.arena_width
+            print(f"ses_pos_name: {ses_pos_name}")
+            print(f"shape of position data:  x-{x.shape}, y-{y.shape}, t-{t.shape}")
             position_pairs = np.array([x, y, t]).T.squeeze()
             arena_size = [float(arena_height), float(arena_width)]
 
@@ -147,6 +155,8 @@ def main(study, settings_dict, output_path):
             position_features_dataarray.attrs["probe_data_ref"] = probe_data_ref
             position_features_dataarray.attrs["recording_length"] = str(duration)
             position_features_dataarray.attrs["unit_of_measure"] = "cm"
+            print(f"ppm added to position features attirbutes: {file_ppm}")
+            position_features_dataarray.attrs["ppm"] = str(file_ppm)
 
             spike_times_dataarray = xr.DataArray(
                 data=np.asarray(cluster_event_times).reshape((-1,1)),
@@ -209,13 +219,18 @@ def main(study, settings_dict, output_path):
             spike_waveforms_dataarray.attrs["session_data_ref"] = session_data_ref
             spike_waveforms_dataarray.attrs["animal_data_ref"] = animal_data_ref
             spike_waveforms_dataarray.attrs["probe_data_ref"] = probe_data_ref
+            sample_rate = str(spike_param_dict["sample_rate"])
+            print(f"adding sample rate attribute: {sample_rate}")
+            print(f"sample_rate type: {type(sample_rate)}")
+            spike_waveforms_dataarray.attrs["sampling_rate"] = sample_rate
+
 
             duration_unit = "second"
             srecord = {"schema_ref": "session", "data_name": str(ses_pos_name),
                        "animal_id": str(aid), "session_date": str(date_with_dash), "session_time": str(trial_time), 
                        "tetrode_depth": str(depth), 
                        "stimulus_id": str(stim), "duration": str(duration), 
-                       "duration_unit": str(duration_unit),"stimulus_type": str(stimtype)}
+                       "duration_unit": str(duration_unit),"stimulus_type": str(stimtype), "set_name": str(fname)}
 
             # # session record
             session_record_path = os.path.join(output_path, "session" +"_record.xlsx")
@@ -240,21 +255,22 @@ def main(study, settings_dict, output_path):
                         row[6] == str(stim) and 
                         row[7] == str(duration) and 
                         row[8] == str(duration_unit) and
-                        row[9] == str(stimtype)):
+                        row[9] == str(stimtype) and
+                        row[10] == str(fname)):
                         session_duplicate_found = True
                         break
 
                 if session_duplicate_found:
                     pass
                 else:
-                    session_record_ws.append([srecord["schema_ref"], srecord["data_name"], srecord["animal_id"], srecord["session_date"], srecord["session_time"], srecord["tetrode_depth"], srecord["stimulus_id"], srecord["duration"], srecord["duration_unit"], srecord["stimulus_type"]])
+                    session_record_ws.append([srecord["schema_ref"], srecord["data_name"], srecord["animal_id"], srecord["session_date"], srecord["session_time"], srecord["tetrode_depth"], srecord["stimulus_id"], srecord["duration"], srecord["duration_unit"], srecord["stimulus_type"], srecord["set_name"]])
             else:
                 session_record_wb = Workbook()
                 session_record_ws = session_record_wb.active
                 # add column headers
-                session_record_ws.append(["schema_ref", "data_name", "animal_id", "session_date", "session_time", "tetrode_depth", "stimulus_id", "duration", "duration_unit", "stimulus_type"])
+                session_record_ws.append(["schema_ref", "data_name", "animal_id", "session_date", "session_time", "tetrode_depth", "stimulus_id", "duration", "duration_unit", "stimulus_type", "set_name"])
                 # add data
-                session_record_ws.append([srecord["schema_ref"], srecord["data_name"], srecord["animal_id"], srecord["session_date"], srecord["session_time"], srecord["tetrode_depth"], srecord["stimulus_id"], srecord["duration"], srecord["duration_unit"], srecord["stimulus_type"]])
+                session_record_ws.append([srecord["schema_ref"], srecord["data_name"], srecord["animal_id"], srecord["session_date"], srecord["session_time"], srecord["tetrode_depth"], srecord["stimulus_id"], srecord["duration"], srecord["duration_unit"], srecord["stimulus_type"], srecord["set_name"]])
 
 
             if "ANT" in aid:
@@ -341,11 +357,11 @@ if __name__ == "__main__":
 
     STUDY_SETTINGS = {
 
-        "ppm": 485,  # EDIT HERE
+        "ppm": None,  # change to None if you want to use the ppm from the first the .set file comments if available, otherwise will read ppm from the .pos file
 
         "smoothing_factor": 3, # EDIT HERE
 
-        "useMatchedCut": True,  # EDIT HERE
+        "useMatchedCut": False,  # EDIT HERE
     }
 
     # Switch devices to True/False based on what is used in the acquisition (to be extended for more devices in future)
@@ -363,7 +379,7 @@ if __name__ == "__main__":
     settings_dict = STUDY_SETTINGS
 
     settings_dict["speed_lowerbound"] = 0 
-    settings_dict["speed_upperbound"] = 99
+    settings_dict["speed_upperbound"] = 100
     settings_dict["ratemap_dims"] = (32,32)
     settings_dict["disk_arena"] = True
     settings_dict["naming_type"] = "LEC"
