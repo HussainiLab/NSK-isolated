@@ -5,6 +5,7 @@ This module will format the data into a dictionary that can be taken in by the S
 """
 
 import os, sys
+import re
 
 PROJECT_PATH = os.getcwd()
 sys.path.append(PROJECT_PATH)
@@ -26,6 +27,59 @@ from x_io.rw.axona.read_tetrode_and_cut import (
 from x_io.rw.axona.read_pos import (
     grab_position_data,
 )
+
+
+def _read_ppm_from_set_comment(tet_file):
+    set_file = os.path.splitext(tet_file)[0] + '.set'
+    header_fields = {
+        'trial_date',
+        'trial_time',
+        'experimenter',
+        'comments',
+        'duration',
+        'sw_version',
+        'num_chans',
+        'timebase',
+        'bytes_per_timestamp',
+        'samples_per_spike',
+        'sample_rate',
+        'bytes_per_sample',
+        'spike_format',
+        'num_spikes',
+        'data_start',
+    }
+
+    if not os.path.exists(set_file):
+        return None
+
+    try:
+        with open(set_file, 'r') as file_handle:
+            in_comments = False
+            comment_lines = []
+
+            for line in file_handle:
+                stripped_line = line.strip()
+
+                if stripped_line.lower().startswith('comments'):
+                    in_comments = True
+                    comment_lines.append(stripped_line)
+                    continue
+
+                if in_comments:
+                    field_name = stripped_line.split(' ', 1)[0].lower() if stripped_line else ''
+                    if field_name in header_fields:
+                        break
+                    comment_lines.append(stripped_line)
+
+            if comment_lines:
+                comments_text = ' '.join(comment_lines)
+                match = re.search(r'ppm\s*\{?\s*(\d+(?:\.\d+)?)\s*\}?', comments_text, re.IGNORECASE)
+                if match is not None:
+                    return float(match.group(1))
+    except OSError:
+        return None
+
+    return None
 
 def make_study(directory, settings_dict: list):
 
@@ -88,7 +142,10 @@ def _grab_tetrode_cut_position_files(paths: list, pos_files=[], cut_files=[], te
     if len(paths) == 1 and os.path.isdir(paths[0]):
         files = os.listdir(paths[0])
         for file in files:
-            # file = file.decode()
+            #file = file.decode()
+            # print(f"paths[0]: {paths[0]}")
+            # print(f"##### file: {file} #####")
+            # print(f"file[-1:]: {file[-1:]}")
             fpath = paths[0] + '/' + file
             if os.path.isdir(fpath) and 'git' not in fpath:
                 cut_files, tetrode_files, pos_files, matched_cut_files, animal_dir_names = _grab_tetrode_cut_position_files(os.listdir(fpath), pos_files=pos_files, cut_files=cut_files, tetrode_files=tetrode_files, matched_cut_files=matched_cut_files, animal_dir_names=animal_dir_names, parent_path=fpath)
@@ -130,6 +187,8 @@ def _grab_tetrode_cut_position_files(paths: list, pos_files=[], cut_files=[], te
     for file_list in file_lists:
         file_list = list(set(file_list))
 
+    # print("inside batch_Read.py")
+    # print(f"tetrode files: {tetrode_files}")
     return cut_files, tetrode_files, pos_files, matched_cut_files, animal_dir_names
 
 def _group_session_files(cut_files, tetrode_files, pos_files, matched_cut_files, animal_dir_names):
@@ -325,12 +384,25 @@ def batch_sessions(sorted_files, settings_dict, indiv_session_settings):
     return sessions
 
 
+
 def make_session(cut_file, tet_file, pos_file, settings_dict, session_settings_dict):
+    '''
+    change make_session so that it determines ppm from...
+    1. the settings dict
+    2. the set file (if ppm is not in settings dict/ settings dict ppm = None)
+    3. the position file (if settings dict ppm = None and set file ppm = None)
+    '''
 
     if 'ppm' in settings_dict:
         ppm = settings_dict['ppm']
     else:
         ppm = None
+
+    #logic to read ppm from set file if not in settings dict, otherwise read from pos file
+    if ppm is None:
+        ppm = _read_ppm_from_set_comment(tet_file)
+        if ppm is not None:
+            print('PPM read from set file: ' + str(ppm))
 
     session_dict = _init_session_dict(session_settings_dict)
 

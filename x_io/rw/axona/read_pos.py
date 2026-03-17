@@ -184,7 +184,7 @@ def _get_position(pos_fpath, ppm=None, method='', flip_y=True):
                     print('DECODING PPM FROM FILE')
                     ppm = new_ppm
                 else:
-                    print('USING PPM YOU SET IN SETTINGS')
+                    print('USING PPM YOU FROM SETTINGS DICT or SET file, NOT DECODING PPM FROM POS FILE')
             elif 'min_x' in str(line) and 'window' not in str(line):
                 min_x = int(line.decode(encoding='UTF-8')[len('min_x '):])
                 headers += line.decode(encoding='UTF-8')
