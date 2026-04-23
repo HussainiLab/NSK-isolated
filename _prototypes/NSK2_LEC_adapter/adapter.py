@@ -40,6 +40,17 @@ def flat_disk_mask(rate_map):
     return  masked_rate_map.data
 
 
+# def read_ppm_from_pos_file(pos_file_path):
+#     """Read pixels_per_metre directly from an Axona .pos header."""
+#     with open(pos_file_path, "rb") as pos_file:
+#         for line in pos_file:
+#             if b"pixels_per_metre" in line:
+#                 return float(line.decode("utf-8").split("pixels_per_metre", 1)[1].strip())
+#             if b"data_start" in line:
+#                 break
+#     raise ValueError(f"Could not find pixels_per_metre in pos file: {pos_file_path}")
+
+
 def main(study, settings_dict, output_path):
 
     custom_lec_prefix = "Study1_LEC_Andrew"
@@ -96,7 +107,8 @@ def main(study, settings_dict, output_path):
             cluster_labels = spike_cluster.cluster_labels
             cluster_labels = np.array(cluster_labels, dtype=np.float32).squeeze() # FLOAT
             cluster_event_times = spike_cluster.event_times # FLOAT
-            cluster_event_times = np.array(cluster_event_times, dtype=np.float32).squeeze()
+            # cluster_event_times = np.array(cluster_event_times, dtype=np.float32).squeeze()
+            cluster_event_times = np.array(cluster_event_times, dtype=np.float64).squeeze()
             cluster_waveforms = spike_cluster.waveforms # dict
 
             # get idx of cluster labels that are not noise which is 0
@@ -158,10 +170,19 @@ def main(study, settings_dict, output_path):
             print(f"ppm added to position features attirbutes: {file_ppm}")
             position_features_dataarray.attrs["ppm"] = str(file_ppm)
 
+
+            #original code
+            # spike_times_dataarray = xr.DataArray(
+            #     data=np.asarray(cluster_event_times).reshape((-1,1)),
+            #     dims=("spike_idx", "1"),
+            #     coords={"spike_idx": np.array(np.arange(len(cluster_event_times)),dtype=np.float32).squeeze()},
+            # )
+
+            # testing to see if float 64 helps with precision issues in new EMD
             spike_times_dataarray = xr.DataArray(
-                data=np.asarray(cluster_event_times).reshape((-1,1)),
+                data=np.asarray(cluster_event_times, dtype=np.float64).reshape((-1,1)),
                 dims=("spike_idx", "1"),
-                coords={"spike_idx": np.array(np.arange(len(cluster_event_times)),dtype=np.float32).squeeze()},
+                coords={"spike_idx": np.array(np.arange(len(cluster_event_times)),dtype=np.float64).squeeze()},
             )
 
             spike_times_dataarray.attrs["schema_ref"] = "spike_times"
@@ -357,7 +378,7 @@ if __name__ == "__main__":
 
     STUDY_SETTINGS = {
 
-        "ppm": None,  # change to None if you want to use the ppm from the first the .set file comments if available, otherwise will read ppm from the .pos file
+        "ppm": None,  # EDIT HERE, ppm was 485
 
         "smoothing_factor": 3, # EDIT HERE
 
@@ -409,8 +430,10 @@ if __name__ == "__main__":
 
     custom_lec_prefix = "Study1_LEC"
     custom_arena_prefix = "Arena1_LEC"
-    study_record = pd.DataFrame(columns=["schema_ref", "data_name", "study_description"])  
-    study_record_dict = {"schema_ref":"study","data_name": custom_lec_prefix, "study_description": "LEC recordings of object exploration"}
+    study_record = pd.DataFrame(columns=["schema_ref", "data_name", "study_description", "speed_lowerbound", "speed_upperbound", "smoothing_factor"])  
+    study_record_dict = {"schema_ref":"study","data_name": custom_lec_prefix, "study_description": "LEC recordings of object exploration", 
+                         "speed_lowerbound": settings_dict["speed_lowerbound"], "speed_upperbound": settings_dict["speed_upperbound"], 
+                        "smoothing_factor": settings_dict["smoothing_factor"]}
     study_record_path = os.path.join(output_folder_path, "study_record.xlsx")
     study_record = pd.DataFrame(study_record_dict, index=[0])
     study_record.to_excel(study_record_path, index=False)
