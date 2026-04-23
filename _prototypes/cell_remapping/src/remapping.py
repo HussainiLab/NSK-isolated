@@ -1,3 +1,4 @@
+
 import os, sys
 import copy
 
@@ -47,20 +48,6 @@ from _prototypes.cell_remapping.src.settings import obj_output, centroid_output,
                             
 def compute_remapping(study, settings, data_dir):
 
-    # aside
-    # collects stacked spike counts for each group and session 
-    # stack_dict = {}
-    # stack_dict['control'] = {}
-    # stack_dict['app_ki'] = {}
-    # stack_dict['control']['session_1'] = []
-    # stack_dict['control']['session_2'] = []
-    # stack_dict['control']['session_3'] = []
-    # stack_dict['control']['session_4'] = []
-    # stack_dict['app_ki']['session_1'] = []
-    # stack_dict['app_ki']['session_2'] = []
-    # stack_dict['app_ki']['session_3'] = []
-    # stack_dict['app_ki']['session_4'] = []
-
     isStart = True
     context_paths = {}
     context_temporal_paths = {}
@@ -68,12 +55,21 @@ def compute_remapping(study, settings, data_dir):
     ratemap_size = settings['ratemap_dims'][0]
 
     animal_cell_info, animal_cell_ratemaps = aggregate_map_blobs(study, settings)
-
+    
     animal_ref_dist = collect_shuffled_ratemaps(animal_cell_ratemaps, settings)
 
+    print(f"inside compute remapping.py")
+    for animal in study.animals:
+        
+        animal_id = animal.animal_id
+        print(f"animal_id: {animal_id}")
+   
+  
     for animal in study.animals:
 
         animal_id = animal.animal_id.split('_')[0]
+        print(f"animal_id: {animal_id}")
+        print(f"animal.animal_id: {animal.animal_id}")
 
         # need to add separate option for circular shuffling
         """ UNCOMMENT TO RUN CIRCULAR SHUFFLING REF DIST"""
@@ -82,9 +78,13 @@ def compute_remapping(study, settings, data_dir):
         # max_centroid_count, blobs_dict, _, _ = _aggregate_cell_info(animal, settings)
        
         max_centroid_count, blobs_dict = animal_cell_info[animal.animal_id]
+        print(f"max_centroid_count: {max_centroid_count}")
+
 
 
         max_matched_cell_count = get_max_matched_cell_count(animal)
+        print(f"max_matched_cell_count: {max_matched_cell_count}")
+
 
         # for every existing cell id across all sessions
         for k in range(int(max_matched_cell_count)):
@@ -106,6 +106,7 @@ def compute_remapping(study, settings, data_dir):
             curr_shuffled = None
             cell_session_appearances = []
             
+
             if settings['ses_limit'] is None:
                 ses_limit = len(list(animal.sessions.keys()))
             else:
@@ -113,23 +114,29 @@ def compute_remapping(study, settings, data_dir):
                     ses_limit = len(list(animal.sessions.keys()))
                 else:
                     ses_limit = settings['ses_limit']
+            print(f"ses_limit: {ses_limit}")
 
             # for every session
             # for i in range(len(list(animal.sessions.keys()))):
             for i in range(ses_limit):
                 # seskey = 'session_' + str(i+1)
                 seskey = list(animal.sessions.keys())[i]
-                print(seskey)
+                print(f"\nseskey: {seskey}")
                 ses = animal.sessions[seskey]
                 path = ses.session_metadata.file_paths['tet']
                 fname = path.split('/')[-1].split('.')[0]
+                print(f"fname: {fname}")
 
 
                 cylinder = check_cylinder(fname, settings['disk_arena'])
-                print(settings['naming_type'])
+                print(f"cylinder: {cylinder}")
+        
                 stim, depth, name, date = read_data_from_fname(fname, settings['naming_type'], settings['type'])
+                print(f"stim: {stim}, depth: {depth}, name: {name}, date: {date}")
 
                 object_location = check_object_location(stim, settings['hasObject'])
+                print(f"object_location: {object_location}")
+            
 
                 ensemble = ses.get_cell_data()['cell_ensemble']
                 print(cell_label, ensemble.get_cell_label_dict())
@@ -138,6 +145,7 @@ def compute_remapping(study, settings, data_dir):
                     
                     cell = ensemble.get_cell_by_id(cell_label)
                     cell_session_appearances.append(cell)
+                    print(f"cell: {cell}")
                     spatial_spike_train = cell.stats_dict['spatial_spike_train'] 
 
                     rate_map_obj = spatial_spike_train.get_map('rate')
@@ -152,58 +160,88 @@ def compute_remapping(study, settings, data_dir):
                     curr_path = ses.session_metadata.file_paths['tet'].split('/')[-1].split('.')[0]
                     curr_id = str(animal.animal_id) + '_' + str(seskey) + '_' + str(cell.cluster.cluster_label)
 
-                    """ Saves stacked matrix of spike counts """
-                    # # REMOVE
-                    # app = ['1-13','1-14','1a-27', '1-30', '1-35', '1a-37']
-                    # control = ['1-20','1-24','1-25', '1-28', '1-34', '1a23-S30-31', '1a-40']
-
-                    # aiduse = str(animal.animal_id)
-                    # aiduse = aiduse.split('_tet')[0].replace('_','-')
-                    # if aiduse in control:
-                    #     control_or_app = 'control'
-                    # else:
-                    #     assert aiduse in app, 'Animal id not in app ' + aiduse
-                    #     control_or_app = 'app_ki'
-                    # cts, _ = np.histogram(cell.event_times, bins=np.arange(0,1205,1))
-                    # binned_times = cts / np.mean(cts)
-                    # if len(stack_dict[control_or_app][seskey]) == 0:
-                    #     stack_dict[control_or_app][seskey] = binned_times
-                    # else:
-                    #     stack_dict[control_or_app][seskey] = np.vstack((stack_dict[control_or_app][seskey], binned_times))
-                    # # REMOVE
-
                     y, x = curr.shape
                     h, w = rate_map_obj.arena_size
                     # print(h, w)
                     bin_area = h/y * w/x
+                    print(f"\nold EMD")
+                    print(f"cell_label: {cell_label}")
+                    print(f"curr shape: {curr.shape}")
+                    print(f"curr_id: {curr_id}")
+                    print(f"y={y}, x={x}, h={float(h):.4f}, w={float(w):.4f}, bin_area={float(bin_area):.4f}")
+
+                    print(f"curr nanmean={np.nanmean(curr):.4f}")
+                    print(f"curr nanstd={np.nanstd(curr):.4f}")
+                    print(f"curr valid_px={np.count_nonzero(~np.isnan(curr))}")
+                    print(f"disk_ids shape={disk_ids.shape if disk_ids is not None else None}")
+                    print(f"curr_key={curr_key}")
+                    print(f"curr_path={curr_path}")
+                    print(f"object_location={object_location}")
+                    print(f"bin_area={float(bin_area):.4f}")
 
                     # If doing object remapping (i.e. synthetic ratemap with all firing in one bin)
                     if settings['hasObject']:
+                        print("=" * 40)
+                        print(f"OLD EMD: inside hasObject")
+                        print("=" * 40)
                         
                         # get relevant centroid infomarition (for field reestricted EMD)
                         _, _, labels, centroids, field_sizes = blobs_dict[curr_id]
+                        print(f"curr_id={curr_id}")
+                        print(f"labels shape={labels.shape} unique={np.unique(labels)}")
+                        print(f"centroids n={len(centroids)}")
+                        for ci, c in enumerate(centroids):
+                            print(f"  centroid {ci}: {c}")
+                        print(f"field_sizes n={len(field_sizes)}")
+                        for fi, fs in enumerate(field_sizes):
+                            print(f"  field {fi}: {fs:.4f}%")
 
                         assert len(np.unique(labels)[1:]) == len(centroids) == len(field_sizes), 'Mismatch in number of labels, centroids and field sizes'
 
                         labels_copy, c_count = _copy_labels(labels, curr)
+                        print(f"c_count={c_count}")
+                        print(f"labels_copy shape={labels_copy.shape} unique={np.unique(labels_copy)}")
               
                         cumulative_coverage, cumulative_area, cumulative_rate = compute_cumulative_blob_stats(labels_copy, curr)
+                        print(f"cumulative_coverage={cumulative_coverage:.4f}")
+                        print(f"cumulative_area={cumulative_area:.4f}")
+                        print(f"cumulative_rate={cumulative_rate:.4f}")
+
+                        # add summaries (important for comparing old vs new)
+                        print(f"coverage sum: {np.sum(cumulative_coverage)}")
+                        print(f"area sum: {np.sum(cumulative_area)}")
+                        print(f"rate sum: {np.sum(cumulative_rate)}")
+
 
                         height_bucket_midpoints, width_bucket_midpoints = _get_ratemap_bucket_midpoints(rate_map_obj.arena_size, y, x)
+                        print(f"height_bucket_midpoints shape={height_bucket_midpoints.shape} min={height_bucket_midpoints.min():.4f} max={height_bucket_midpoints.max():.4f}")
+                        print(f"width_bucket_midpoints shape={width_bucket_midpoints.shape} min={width_bucket_midpoints.min():.4f} max={width_bucket_midpoints.max():.4f}")
 
                         curr_labels = labels
 
                         resampled_positions = generate_grid(rate_map_obj.arena_size[0], rate_map_obj.arena_size[1], 
                                                                 settings['spacing'], is_hexagonal=settings['hexagonal'], is_cylinder=cylinder)
-
-                        print('Resampled positions: ', len(resampled_positions), len(resampled_positions[0]))
+                        
+                        print(f"resampled_positions: n={len(resampled_positions)} first={resampled_positions[0]}")
+                        print(f"Resampled positions: {len(resampled_positions)} {len(resampled_positions[0])}")
 
                         obj_map_dict = make_obj_map_dict(variations, settings, cylinder, disk_ids)
+                        print(f"obj_map_dict keys: {list(obj_map_dict.keys())}")
+                        for var in obj_map_dict:
+                            rm, pos, ids = obj_map_dict[var]
+                            print(f"  var={var} ratemap shape={rm.shape} nanmean={np.nanmean(rm):.4f} pos={pos}")
+                        
                         
                         for obj_score in settings['object_scores']:
+                            print("=" * 40)
+                            print(f"EMD OLD: inside hasObject")
+                            print("=" * 40)
+                            print(f"\nobj_score={obj_score}")
                             unq_labels = np.unique(labels)[1:]
+                            print(f"unq_labels={unq_labels}")
                             for lid in range(len(unq_labels)):
                                 label_id = unq_labels[lid]
+                                print(f"lid={lid} label_id={label_id}")
                                 true_object_pos = None
                                 true_object_ratemap = None
 
@@ -223,49 +261,72 @@ def compute_remapping(study, settings, data_dir):
                                         true_object_ratemap = object_ratemap
 
                                     obj_x, obj_y = _check_object_coords(object_pos, height_bucket_midpoints, width_bucket_midpoints)
+                                    print(f"  var={var} object_pos={object_pos} obj_x={obj_x} obj_y={obj_y}")
 
                                     y, x = curr.shape
-                                    # height_bucket_midpoints, width_bucket_midpoints = _get_ratemap_bucket_midpoints(curr_spatial_spike_train.arena_size, y, x)
+                                    print(f"  y={y} x={x}")
+                                    
+                                    # ######## TESTING OBJECT SCORE ########
+                                    # obj_score = 'centroid'
+                                    # #tested = whole, field, spike_density, binary
+                                    # ######## TESTING OBJECT SCORE ########
 
-                                    # lid 0 we do whole/spike density once and don't repeat forl ater lid
-                                    # other lid we only repeat field and binary for new fieldlabel
-                                    # EMD on norm/unnorm ratemap + object map for OBJECT remapping
                                     if obj_score == 'whole' and lid == 0:
-                                        
+                                        #tested
+                                        print("=" * 40)
+                                        print(f"EMD OLD: inside obj_score == 'whole'")
+                                        print("=" * 40)
+
                                         obj_wass = single_point_wasserstein(object_pos, curr_ratemap, rate_map_obj.arena_size, ids=disk_ids)
+                                        print(f"inside if obj_score == 'whole'")
+                                        print(f"rate_map_obj.arena_size: {rate_map_obj.arena_size}  ")
                                 
                                         # compute EMD on resamples
                                         if resampled_wass is None:
                                             resampled_wass = list(map(lambda x: single_point_wasserstein(x, curr_ratemap, rate_map_obj.arena_size, ids=disk_ids, use_pos_directly=True), resampled_positions))
                                         quantile = (resampled_wass < obj_wass).mean()
+                                        print(f"obj_wass={obj_wass:.4f}")
                         
                                         mag, angle, pt1, pt2 = get_vector_from_map(curr, rate_map_obj.arena_size, y, x, obj_y, obj_x, 'whole')
+                                        print(f"mag={mag:.4f} angle={angle:.4f} pt1={pt1} pt2={pt2}")
 
                                     elif obj_score == 'field':
+                                        print("=" * 40)
+                                        print(f"EMD NOLD: inside obj_score == 'field'")
+                                        print("=" * 40)
 
                                         # field ids is ids of binary field/map blolb
                                         # TAKE ONLY MAIN FIELD --> already sorted by size
                                         row, col = np.where(curr_labels == label_id)
                                         field_ids = np.array([row, col]).T
+                                        print(f"field_ids shape={field_ids.shape}")
 
                                         if cylinder:
                                             # print('IT IS A CYLINDER, TAKING ONLY IDS IN FIELD AND IN DISK')
                                             field_disk_ids = np.array([x for x in field_ids if x in disk_ids])
                                         else:
                                             field_disk_ids = field_ids
+                                        print(f"field_disk_ids shape={field_disk_ids.shape}")
                                         
                                         obj_wass = single_point_wasserstein(object_pos, curr_ratemap, rate_map_obj.arena_size, ids=field_disk_ids)
+                                        print(f"obj_wass={obj_wass:.4f}")
 
                                         # compute EMD on resamples
                                         if resampled_wass is None:
                                             resampled_wass = list(map(lambda x: single_point_wasserstein(x, curr_ratemap, rate_map_obj.arena_size, ids=field_disk_ids, use_pos_directly=True), resampled_positions))
                                         quantile = (resampled_wass < obj_wass).mean()
+                                        print(f"quantile={quantile:.4f}")
 
                                         mag, angle, pt1, pt2 = get_vector_from_map(centroids, rate_map_obj.arena_size, y, x, obj_y, obj_x, 'field')
-
+                                        print(f"mag={mag:.4f} angle={angle:.4f} pt1={pt1} pt2={pt2}")
                                     elif obj_score == 'spike_density' and lid == 0:
-
+                                        print("=" * 40)
+                                        print(f"EMD NEW: inside obj_score == 'spike_density'")
+                                        print("=" * 40)
                                         curr_spike_pos_x, curr_spike_pos_y = curr_spatial_spike_train.spike_x, curr_spatial_spike_train.spike_y
+                                        print(f"curr_spike_pos_x shape={curr_spike_pos_x.shape} min={curr_spike_pos_x.min():.4f} max={curr_spike_pos_x.max():.4f}")
+                                        print(f"curr_spike_pos_y shape={curr_spike_pos_y.shape} min={curr_spike_pos_y.min():.4f} max={curr_spike_pos_y.max():.4f}")
+
                                         # curr_spike_pos_x *= -1
                                         # curr_spike_pos_x += np.abs(np.min(curr_spike_pos_x))
                                         # curr_spike_pos_y += np.abs(np.min(curr_spike_pos_y))
@@ -275,18 +336,26 @@ def compute_remapping(study, settings, data_dir):
                                         if np.min(curr_spike_pos_y) < 0:
                                             curr_spike_pos_y += np.abs(np.min(curr_spike_pos_y))
                                         assert np.min(curr_spike_pos_x) >= 0 and np.min(curr_spike_pos_y) >= 0, 'Negative spike positions'
+                                        print(f"after shift: curr_spike_pos_x min={curr_spike_pos_x.min():.4f} max={curr_spike_pos_x.max():.4f}")
+                                        print(f"after shift: curr_spike_pos_y min={curr_spike_pos_y.min():.4f} max={curr_spike_pos_y.max():.4f}")
+ 
                                 
                                         curr_pts = np.array([curr_spike_pos_y, curr_spike_pos_x]).T
+                                        print(f"curr_pts shape={curr_pts.shape} mean={curr_pts.mean():.4f}")
 
                                         obj_wass = single_point_wasserstein(object_pos, curr_ratemap, rate_map_obj.arena_size, density=True, density_map=curr_pts, use_pos_directly=False)
+                                        print(f"obj_wass={obj_wass:.4f}")
 
                                         # compute EMD on resamples
                                         if resampled_wass is None:
                                             resampled_wass = list(map(lambda x: single_point_wasserstein(x, curr_ratemap, rate_map_obj.arena_size, density=True, density_map=curr_pts, use_pos_directly=True), resampled_positions))
                                         quantile = (resampled_wass < obj_wass).mean()
+                                        print(f"quantile={quantile:.4f}")
+
 
                                         mag, angle, pt1, pt2 = get_vector_from_map([curr_spike_pos_y, curr_spike_pos_x], rate_map_obj.arena_size, y, x, obj_y, obj_x, 'spike_density')
-
+                                        print(f"mag={mag:.4f} angle={angle:.4f} pt1={pt1} pt2={pt2}")
+                                    
                                     elif obj_score == 'binary':
 
                                         curr_masked, field_disk_ids = binary_mask(curr_labels, label_id, disk_ids, cylinder)
@@ -299,8 +368,18 @@ def compute_remapping(study, settings, data_dir):
                                         quantile = (resampled_wass < obj_wass).mean()
 
                                         mag, angle, pt1, pt2 = get_vector_from_map(curr_masked, rate_map_obj.arena_size, y, x, obj_y, obj_x, 'binary')
-
+                                        print("=" * 40)
+                                        print(f"EMD OLD: inside obj_score == 'binary'")
+                                        print("=" * 40)
+                                        print(f"curr_masked shape={curr_masked.shape} nanmean={np.nanmean(curr_masked):.4f}")
+                                        print(f"field_disk_ids shape={field_disk_ids.shape}")
+                                        print(f"obj_wass={obj_wass:.4f}")
+                                        print(f"quantile={quantile:.4f}")
+                                        print(f"mag={mag:.4f} angle={angle:.4f} pt1={pt1} pt2={pt2}")
                                     elif obj_score == 'centroid':
+                                        print("=" * 40)
+                                        print(f"EMD OLD: inside obj_score == 'centroid'")
+                                        print("=" * 40)
 
                                         # TAKE ONLY MAIN FIELD --> already sorted by size
                                         main_centroid = centroids[lid]
@@ -313,7 +392,10 @@ def compute_remapping(study, settings, data_dir):
                                         quantile = (resampled_wass < obj_wass).mean()
 
                                         mag, angle, pt1, pt2 = get_vector_from_map(main_centroid,rate_map_obj.arena_size, y, x, obj_y, obj_x, 'centroid')
-
+                                        print(f"main_centroid={main_centroid}")
+                                        print(f"obj_wass={obj_wass:.4f}")
+                                        print(f"quantile={quantile:.4f}")
+                                        print(f"mag={mag:.4f} angle={angle:.4f} pt1={pt1} pt2={pt2}")
                                     if lid != 0 and (obj_score == 'whole' or obj_score == 'spike_density') == True:
                                         pass 
                                     else:
@@ -321,7 +403,10 @@ def compute_remapping(study, settings, data_dir):
                                         obj_dict[obj_wass_key].append(obj_wass)
                                         obj_dict[obj_quantile_key].append(quantile)
                                         obj_dict[obj_vector_key].append([pt1, pt2, mag, angle])
-
+                                        print(f"obj_dict[{obj_wass_key}]={obj_wass:.4f}")
+                                        print(f"obj_dict[{obj_quantile_key}]={quantile:.4f}")
+                                        print(f"obj_dict[{obj_vector_key}]={[pt1, pt2, mag, angle]}")
+                                
                                 # if first centroid label, we can save whole map annd spike density scores, if second or later label, we don't want to resave
                                 # the whole map and spike density scores
                                 if lid != 0 and (obj_score == 'whole' or obj_score == 'spike_density') == True:
@@ -349,7 +434,10 @@ def compute_remapping(study, settings, data_dir):
                                     obj_dict['cumulative_area'].append(cumulative_area)
                                     obj_dict['cumulative_rate'].append(cumulative_rate)
                                     obj_dict['field_count'].append(c_count)
-                                    obj_dict['bin_area'].append(bin_area[0])
+                                    print(f"bin_arena: {bin_area}")
+                                    print(f"rate_map_obj.arena_size: {rate_map_obj.arena_size}")
+                                    # obj_dict['bin_area'].append(bin_area[0])
+                                    obj_dict['bin_area'].append(float(bin_area))
                                     obj_dict['object_location'].append(object_location)
                                     obj_dict['obj_pos'].append((true_object_pos['x'], true_object_pos['y']))
                                     obj_dict['signature'].append(curr_path)
@@ -373,77 +461,158 @@ def compute_remapping(study, settings, data_dir):
                                     else:
                                         obj_dict['downsample_factor'].append(1)
 
+                                    print("=" * 40)
+                                    print(f"EMD OLD: after obj_dict append'")
+                                    print("=" * 40)
+                                    print(f"field_coverage={field_coverage:.4f} field_area={field_area} field_rate={field_rate:.4f}")
+                                    print(f"total_rate={total_rate:.4f} field_peak_rate={field_peak_rate:.4f}")
+                                    print(f"bin_area={float(bin_area):.4f}")
+                                    print(f"spike_count={len(curr_spatial_spike_train.spike_times)}")
+                                    print(f"tetrode={animal.animal_id.split('tet')[-1]} session_id={seskey}")
+                                    print(f"arena_size={curr_spatial_spike_train.arena_size} cylinder={cylinder}")
+                                    print(f"ratemap_dims={curr.shape} spacing={settings['spacing']}")
+                                    
+
                         if settings['plotObject']:
                             plot_obj_remapping(true_object_ratemap, curr, labels, centroids, obj_dict, data_dir)
+
+                  
 
                     if prev is not None:
                         ses_1 = prev_key.split('_')[1]
                         ses_2 = seskey.split('_')[1]
-                        print('search here')
+                        print('\nsearch here')
                         print(prev_key, seskey)
                         ses_comp = str(ses_1) + '_' + str(ses_2)
+                        print(f"prev is not None")
+                        print(f"ses_1: {ses_1}, ses_2: {ses_2}, ses_comp: {ses_comp}")
+                        
         
                     # If prev ratemap is not None (= we are at session2 or later, session1 has no prev session to compare)
                     if prev is not None and settings['runRegular']:
+                        print("\n")
+                        print("=" * 40)
+                        print(f"EMD OLD: inside run regular, prev is not None")
+                        print("=" * 40)
                         
                         prev_pts = _get_spk_pts(prev_spatial_spike_train)
                         curr_pts = _get_spk_pts(curr_spatial_spike_train)
+                        print(f"prev_pts shape={prev_pts.shape} mean={prev_pts.mean():.4f}")
+                        print(f"curr_pts shape={curr_pts.shape} mean={curr_pts.mean():.4f}")
+
+                        print(f"DEBUGGING OBJ + REGULAR REMAPPING ISSUE (OLD EMD)!!!!!!!!!!")
+                        print(f"OLD EMD raw: prev_pts min={prev_pts.min():.4f} max={prev_pts.max():.4f}")
+                        print(f"OLD EMD raw: curr_pts min={curr_pts.min():.4f} max={curr_pts.max():.4f}")
+                        print(f"OLD EMD raw: prev spike_x min={prev_spatial_spike_train.spike_x.min():.4f}")
+                        print(f"OLD EMD raw: curr spike_x min={curr_spatial_spike_train.spike_x.min():.4f}")
+
+                        
 
                         curr_ratemap, curr_pts = _check_rotate_evening(curr_path, curr_pts, curr_ratemap, settings['rotate_evening'], settings['rotate_angle'])
-
+                        print(f"after rotate: curr_ratemap shape={curr_ratemap.shape} nanmean={np.nanmean(curr_ratemap):.4f}")
+                        print(f"after rotate: curr_pts shape={curr_pts.shape} mean={curr_pts.mean():.4f}")
+                        
                         y, x = prev_ratemap.shape
+                        print(f"y={y}, x={x}")
 
                         source_weights, row_prev, col_prev = _get_valid_weight_bins(prev_ratemap)
                         target_weights, row_curr, col_curr = _get_valid_weight_bins(curr_ratemap)
+                        print(f"\nsource_weights: n={len(source_weights)} mean={source_weights.mean():.4f}")
+                        print(f"target_weights: n={len(target_weights)} mean={target_weights.mean():.4f}")
 
                         prev_height_bucket_midpoints, prev_width_bucket_midpoints, coord_buckets_prev = _get_valid_midpoints(prev_spatial_spike_train.arena_size, y, x, row_prev, col_prev)
                         curr_height_bucket_midpoints, curr_width_bucket_midpoints, coord_buckets_curr = _get_valid_midpoints(curr_spatial_spike_train.arena_size, y, x, row_curr, col_curr)
-                                        
+                        print(f"\ncoord_buckets_prev: shape={coord_buckets_prev.shape} mean={coord_buckets_prev.mean():.4f}")
+                        print(f"coord_buckets_curr: shape={coord_buckets_curr.shape} mean={coord_buckets_curr.mean():.4f}")
+
                         source_weights = source_weights / np.sum(source_weights)
                         target_weights = target_weights / np.sum(target_weights)
+                        print(f"\nsource_weights normalized: mean={source_weights.mean():.6f} sum={source_weights.sum():.4f}")
+                        print(f"target_weights normalized: mean={target_weights.mean():.6f} sum={target_weights.sum():.4f}")
+                      
+                    
 
                         if settings['normalizePos']:
+                            print(f"\nOLD EMD: inside normalizePos, normalizing height and width bucket midpoints")
                             prev_height_bucket_midpoints = (prev_height_bucket_midpoints - np.min(prev_height_bucket_midpoints)) / (np.max(prev_height_bucket_midpoints) - np.min(prev_height_bucket_midpoints))
                             prev_width_bucket_midpoints = (prev_width_bucket_midpoints - np.min(prev_width_bucket_midpoints)) / (np.max(prev_width_bucket_midpoints) - np.min(prev_width_bucket_midpoints))
                             curr_height_bucket_midpoints = (curr_height_bucket_midpoints - np.min(curr_height_bucket_midpoints)) / (np.max(curr_height_bucket_midpoints) - np.min(curr_height_bucket_midpoints))
                             curr_width_bucket_midpoints = (curr_width_bucket_midpoints - np.min(curr_width_bucket_midpoints)) / (np.max(curr_width_bucket_midpoints) - np.min(curr_width_bucket_midpoints))
+                            print(f"prev_height_bucket_midpoints: min={prev_height_bucket_midpoints.min():.4f} max={prev_height_bucket_midpoints.max():.4f} mean={prev_height_bucket_midpoints.mean():.4f}")
+                            print(f"prev_width_bucket_midpoints: min={prev_width_bucket_midpoints.min():.4f} max={prev_width_bucket_midpoints.max():.4f} mean={prev_width_bucket_midpoints.mean():.4f}")
+                            print(f"curr_height_bucket_midpoints: min={curr_height_bucket_midpoints.min():.4f} max={curr_height_bucket_midpoints.max():.4f} mean={curr_height_bucket_midpoints.mean():.4f}")
+                            print(f"curr_width_bucket_midpoints: min={curr_width_bucket_midpoints.min():.4f} max={curr_width_bucket_midpoints.max():.4f} mean={curr_width_bucket_midpoints.mean():.4f}")
                         
-
                         if 'spike_density' in settings['rate_scores']:
-
+                            print(f"\n")
+                            print("=" * 40)
+                            print(f"nOLD EMD: inside spike_density")
+                            print("=" * 40)
                             if settings['normalizePos']:
                                 curr_pts = scale_points(curr_pts)
                                 prev_pts = scale_points(prev_pts)
 
-                            spike_dens_wass = pot_sliced_wasserstein(prev_pts, curr_pts, n_projections=settings['n_projections'])      
-                            
+                            ############################ JULIAN COMMENT BACK IN#############################################
+                            # spike_dens_wass = pot_sliced_wasserstein(prev_pts, curr_pts, n_projections=settings['n_projections'])
 
+                            #pass seed for TESTING PURPOSES ONLY!!
+                            print(f"prev_pts shape={prev_pts.shape} mean={prev_pts.mean():.4f} min={prev_pts.min():.4f} max={prev_pts.max():.4f}")
+                            print(f"curr_pts shape={curr_pts.shape} mean={curr_pts.mean():.4f} min={curr_pts.min():.4f} max={curr_pts.max():.4f}")
+                            spike_dens_wass = pot_sliced_wasserstein(prev_pts, curr_pts, n_projections=settings['n_projections'], seed = 0) 
+                            print(f"spike_dens_wass={spike_dens_wass:.4f}")
+
+                            print(f"DEBUGGING reg + obj remapping issue (OLD EMD)!!!!!!!!!")
+                            print(f"prev_pts dtype={prev_pts.dtype} curr_pts dtype={curr_pts.dtype}")
+                            print(f"prev_pts[0]={prev_pts[0]} curr_pts[0]={curr_pts[0]}")
+                            print(f"prev_pts mean={prev_pts.mean():.10f} curr_pts mean={curr_pts.mean():.10f}")
+                          
+                            
+                            print(f"animal_id: {animal_id}, ses_comp: {ses_comp}")
                             null_spike_dens_wass = animal_ref_dist[animal_id][ses_comp]['ref_spike_density']
+                            print(f"null_spike_dens_wass: n={len(null_spike_dens_wass)} mean={np.mean(null_spike_dens_wass):.4f}")
+
                             null_spike_dens_wass_mean, null_spike_dens_wass_std, spike_dens_z_score, spike_dens_mod_z_score, median, mad = get_reference_dist_stats(spike_dens_wass, null_spike_dens_wass)
+                            print(f"null_spike_dens_wass_mean={null_spike_dens_wass_mean:.4f} null_spike_dens_wass_std={null_spike_dens_wass_std:.4f}")
+                            print(f"spike_dens_z_score={spike_dens_z_score:.4f} spike_dens_mod_z_score={spike_dens_mod_z_score:.4f}")
+                            
                             sd_quantile = wasserstein_quantile(spike_dens_wass, null_spike_dens_wass)
+                            print(f"sd_quantile={sd_quantile:.4f}")
                         
                         if 'whole' in settings['rate_scores']:
-                            wass = pot_sliced_wasserstein(coord_buckets_prev, coord_buckets_curr, source_weights, target_weights, n_projections=settings['n_projections'])
+                            print(f"\n")
+                            print("=" * 40)
+                            print(f"NEW OLD:inside if whole in settings['rate_scores']")
+                            print("=" * 40)
 
-                            # line below for circular shuffling
-                            # ref_wass_dist = list(map(lambda x, y: pot_sliced_wasserstein(coord_buckets_prev, coord_buckets_curr, x/np.sum(x), y/np.sum(y), n_projections=settings['n_shuffle_projections']), prev_shuffled, curr_shuffled))
+                            #seed = 0 for TESTING PURPOSES ONLY!!
+                            wass = pot_sliced_wasserstein(coord_buckets_prev, coord_buckets_curr, source_weights, target_weights, n_projections=settings['n_projections'], seed = 0)
+                            print(f"wass: {wass}")
+
                             print('search3')
                             print(animal_id, ses_comp)
                             print(animal_ref_dist[animal_id].keys())
 
                             ref_wass_dist = animal_ref_dist[animal_id][ses_comp]['ref_whole']
+                            print(f"ref_wass_dist: n={len(ref_wass_dist)} mean={np.mean(ref_wass_dist):.4f}")
 
                             ref_wass_mean, ref_wass_std, z_score, mod_z_score, median, mad = get_reference_dist_stats(wass, ref_wass_dist)
+                            print(f"ref_wass_mean={ref_wass_mean:.4f} ref_wass_std={ref_wass_std:.4f}")
+                            print(f"z_score={z_score:.4f} mod_z_score={mod_z_score:.4f}")
                             
-                            # print('doing modified z score')
                             mod_z_score, median, mad = compute_modified_zscore(wass, ref_wass_dist)
+                            print(f"mod_z_score={mod_z_score:.4f} median={median:.4f} mad={mad:.4f}")
 
-                            quantile = wasserstein_quantile(wass, ref_wass_dist)
+                            len_ref_wass_dist = len(ref_wass_dist)
+                            print(f"len_ref_wass_dist: {len_ref_wass_dist}")
                             
+                            quantile = wasserstein_quantile(wass, ref_wass_dist)
                             plower = quantile
                             phigher = 1 - quantile
                             ptwotail = (1- quantile if quantile > 0.5 else quantile)*2
-                            
+                            print(f"quantile={quantile:.4f} plower={plower:.4f} phigher={phigher:.4f} ptwotail={ptwotail:.4f}")
+
+                        
+
                         regular_dict['signature'].append([prev_path, curr_path])
                         regular_dict['spike_count'].append([len(prev_pts), len(curr_pts)])
                         regular_dict['name'].append(name)
@@ -453,7 +622,22 @@ def compute_remapping(study, settings, data_dir):
                         regular_dict['tetrode'].append(animal.animal_id.split('tet')[-1])
                         regular_dict['session_ids'].append([prev_key, curr_key])
                         
+                        print("\n")
+                        print("=" * 40)
+                        print(f"old EMD: regular_dict")
+                        print("=" * 40)
+                        print(f"signature={[prev_path, curr_path]}")
+                        print(f"spike_count={[len(prev_pts), len(curr_pts)]}")
+                        print(f"name={name}, date={date}, depth={depth}")
+                        print(f"unit_id={cell_label}, tetrode={animal.animal_id.split('tet')[-1]}")
+                        print(f"session_ids={[prev_key, curr_key]}")
+                        
+                        
                         if 'whole' in settings['rate_scores']:
+                            print("\n")
+                            print("=" * 40)
+                            print(f"OLD EMD: if whole regular_dict")
+                            print("=" * 40)
                             regular_dict['plower'].append(plower)
                             regular_dict['phigher'].append(phigher)
                             regular_dict['ptwotail'].append(ptwotail)
@@ -465,8 +649,21 @@ def compute_remapping(study, settings, data_dir):
                             regular_dict['base_std'].append(ref_wass_std)
                             regular_dict['median'].append(median)
                             regular_dict['mad'].append(mad)
+                            regular_dict['len_ref_wass_dist'].append(len_ref_wass_dist) #ANDREW
+                            print(f"plower={plower:.4f} phigher={phigher:.4f} ptwotail={ptwotail:.4f}")
+                            print(f"quantile={quantile:.4f} whole_wass={wass:.4f}")
+                            print(f"z_score={z_score:.4f} mod_z_score={mod_z_score:.4f}")
+                            print(f"base_mean={ref_wass_mean:.4f} base_std={ref_wass_std:.4f}")
+                            print(f"median={median:.4f} mad={mad:.4f}")
+                            print(f"len_ref_wass_dist={len_ref_wass_dist}")
                         
+                       
+
                         if 'spike_density' in settings['rate_scores']:
+                            print("\n")
+                            print("=" * 40)
+                            print(f"OLD EMD: if spike_density in settings['rate_scores']")
+                            print("=" * 40)
                             regular_dict['sd_wass'].append(spike_dens_wass)
                             regular_dict['sd_z_score'].append(spike_dens_z_score)
                             regular_dict['sd_base_mean'].append(null_spike_dens_wass_mean)
@@ -474,18 +671,33 @@ def compute_remapping(study, settings, data_dir):
                             regular_dict['sd_median'].append(median)
                             regular_dict['sd_mad'].append(mad)
                             regular_dict['sd_quantile'].append(sd_quantile)
-
+                            print(f"sd_wass={spike_dens_wass:.4f}")
+                            print(f"sd_z_score={spike_dens_z_score:.4f}")
+                            print(f"sd_base_mean={null_spike_dens_wass_mean:.4f} sd_base_std={null_spike_dens_wass_std:.4f}")
+                            print(f"sd_median={median:.4f} sd_mad={mad:.4f}")
+                            print(f"sd_quantile={sd_quantile:.4f}")
+                        
+                        print("\n")
+                        print("=" * 40)
+                        print(f"OLD EMD: spike_density fr")
+                        print("=" * 40)
                         pre_post = prev_spatial_spike_train.new_spike_times
                         curr_post = curr_spatial_spike_train.new_spike_times
                         prev_fr_rate, curr_fr_rate, fr_rate_ratio, fr_rate_change = get_rate_stats(prev_pts, pre_post, curr_pts, curr_post)
+                        print(f"prev_fr_rate={prev_fr_rate:.4f} curr_fr_rate={curr_fr_rate:.4f}")
+                        print(f"fr_rate_ratio={fr_rate_ratio:.4f} fr_rate_change={fr_rate_change:.4f}")
                         
                         ref_rate_ratio_dist = animal_ref_dist[animal_id][ses_comp]['ref_rate_ratio']                       
                         fr_ratio_mean, fr_ratio_std, fr_ratio_z = get_ref_ratio_stats(ref_rate_ratio_dist, fr_rate_ratio)
                         fr_ratio_quantile = wasserstein_quantile(fr_rate_ratio, ref_rate_ratio_dist)
+                        print(f"fr_ratio_mean={fr_ratio_mean:.4f} fr_ratio_std={fr_ratio_std:.4f} fr_ratio_z={fr_ratio_z:.4f}")
+                        print(f"fr_ratio_quantile={fr_ratio_quantile:.4f}")
 
                         ref_rate_change_dist = animal_ref_dist[animal_id][ses_comp]['ref_rate_change']
                         fr_change_mean, fr_change_std, fr_change_z = get_ref_change_stats(ref_rate_change_dist, fr_rate_change)
                         fr_change_quantile = wasserstein_quantile(fr_rate_change, ref_rate_change_dist)
+                        print(f"fr_change_mean={fr_change_mean:.4f} fr_change_std={fr_change_std:.4f} fr_change_z={fr_change_z:.4f}")
+                        print(f"fr_change_quantile={fr_change_quantile:.4f}")
 
                         regular_dict['fr'].append([prev_fr_rate, curr_fr_rate])
                         regular_dict['fr_ratio'].append(fr_rate_ratio)
@@ -502,9 +714,14 @@ def compute_remapping(study, settings, data_dir):
                         regular_dict['arena_size'].append([prev_spatial_spike_train.arena_size, curr_spatial_spike_train.arena_size])
                         regular_dict['cylinder'].append(cylinder)
 
+                        print(f"arena_size=[{prev_spatial_spike_train.arena_size}, {curr_spatial_spike_train.arena_size}]")
+                        print(f"cylinder={cylinder}")
+                        print(f"ratemap_dims={curr.shape}")
+
                         assert prev.shape == curr.shape
                         regular_dict['ratemap_dims'].append(curr.shape)
 
+                       
                         if settings['downsample']:
                             regular_dict['downsample_factor'].append(settings['downsample_factor'])
                         else:
@@ -520,6 +737,8 @@ def compute_remapping(study, settings, data_dir):
                             curr_shuffled = animal_ref_dist[animal_id][ses_comp]['ref_weights'][1]
                             plot_shuffled_regular_remapping(prev_shuffled, curr_shuffled, ref_wass_dist, prev_shuffled_sample, curr_shuffled_sample, regular_dict, data_dir)
 
+                        print(f"PRE-RUNFIELDS OLD EMD: curr_ratemap nanmean={np.nanmean(curr_ratemap):.6f} prev_ratemap nanmean={np.nanmean(prev_ratemap):.6f}")
+                        
                         if settings['runFields']:
 
                             image_prev, n_labels_prev, source_labels, source_centroids, field_sizes_prev = blobs_dict[prev_id]
@@ -539,12 +758,49 @@ def compute_remapping(study, settings, data_dir):
                                 'centroid_wass' is EMD on SINGLE field centroids for norm/unnorm LOCATION remapping (i.e. EMD calculated directly between diff centroid pairs across sessions)
                                 'binary_wass' is EMD on SINGLE fields (binary) for norm/unnorm LOCATION remapping (i.e. unweighted such that each pt contributes equally within field)
                                 """
+                                # print(f"COMPUTE_CENTROID_REMAPPING: THIS FUNCTION HAS SET SEED IN POT_SLICES_WASSERSTEIN! MAKE SURE TO REMOVE THIS AFTER TESTING! SEED=0")
+                                
+                                # print(f"\nCENTROID REMAP SESSION INFO, OLD EMD:")
+                                # print(f"  prev_key={prev_key} curr_key={curr_key}")
+                                # print(f"  prev_id={prev_id} curr_id={curr_id}")
+                                # print(f"  cell_label={cell_label} tet_num={animal.animal_id.split('tet')[-1]}")
+                                # print(f"  prev_path={prev_path}")
+                                # print(f"  curr_path={curr_path}")
+                                # print(f"\nPRE-CENTROID-REMAP, OLD EMD:")
+                                # print(f"  target_labels unique={np.unique(target_labels)}")
+                                # print(f"  source_labels unique={np.unique(source_labels)}")
+                                # print(f"  target_centroids={target_centroids}")
+                                # print(f"  source_centroids={source_centroids}")
+                                # print(f"  field_sizes_prev={[round(f,4) for f in field_sizes_prev]}")
+                                # print(f"  field_sizes_curr={[round(f,4) for f in field_sizes_curr]}")
+                                # print(f"  curr_ratemap nanmean={np.nanmean(curr_ratemap):.6f} shape={curr_ratemap.shape}")
+                                # print(f"  prev_ratemap nanmean={np.nanmean(prev_ratemap):.6f} shape={prev_ratemap.shape}")
+                                # print(f"  curr arena_size={ rate_map_obj.arena_size}")
+
+                                #testing for difference when reg + obj + centroid
+                                curr_rm, _ = curr_spatial_spike_train.get_map('rate').get_rate_map()
+                                prev_rm, _ = prev_spatial_spike_train.get_map('rate').get_rate_map()
+                                print(f"\nCENTROID PRE-CALL OLD EMD: curr rate_map_64 nanmean={np.nanmean(curr_rm):.6f}")
+                                print(f"CENTROID PRE-CALL OLD EMD: prev rate_map_64 nanmean={np.nanmean(prev_rm):.6f}")
+                                print(f"CENTROID PRE-CALL OLD EMD: hasObject={settings['hasObject']}")
+                                
                                 permute_dict, cumulative_dict = compute_centroid_remapping(target_labels, source_labels, curr_spatial_spike_train, prev_spatial_spike_train, target_centroids, source_centroids, settings)
+                                
+                                # print(f"\nPOST-CENTROID-REMAP:")
+                                # print(f"  cumulative field_wass={cumulative_dict['field_wass']:.4f}")
+                                # print(f"  cumulative binary_wass={cumulative_dict['binary_wass']:.4f}")
+                                # print(f"  cumulative centroid_wass={cumulative_dict['centroid_wass']:.4f}")
+                                # print(f"  permute field_wass={[round(float(w),4) for w in permute_dict['field_wass']]}")
+                                # print(f"  permute centroid_wass={[round(float(w),4) for w in permute_dict['centroid_wass']]}")
+                                # print(f"  permute binary_wass={[round(float(w),4) for w in permute_dict['binary_wass']]}")
+                                # print(f"  permute pairs={permute_dict['pairs'].tolist()}")
 
                                 y, x = curr.shape
                                 h, w = rate_map_obj.arena_size
                                 bin_area = h/y * w/x
                                 field_count = [len(np.unique(source_labels)) - 1,len(np.unique(target_labels)) - 1]
+                                print(f"  bin_area={float(bin_area):.4f} field_count={field_count}")
+                                
 
                                 for centroid_score in settings['centroid_scores']:
 
@@ -554,7 +810,8 @@ def compute_remapping(study, settings, data_dir):
                                     centroid_dict['name'].append(name)
                                     centroid_dict['date'].append(date)
                                     centroid_dict['depth'].append(depth)
-                                    centroid_dict['bin_area'].append(bin_area[0])
+                                    # centroid_dict['bin_area'].append(bin_area[0])
+                                    centroid_dict['bin_area'].append(float(bin_area))
                                     centroid_dict['field_count'].append(field_count)
                                     centroid_dict['unit_id'].append(cell_label)
                                     centroid_dict['tetrode'].append(animal.animal_id.split('tet')[-1])
@@ -565,14 +822,25 @@ def compute_remapping(study, settings, data_dir):
                                     centroid_dict['ratemap_dims'].append(curr.shape)
                                     centroid_dict['cumulative_wass'].append(cumulative_dict[score_key])
 
-                                    copy_labels, _ = _copy_labels(source_labels)
+                                    # print(f"\nInside loop for centroid_score={centroid_score}, EMD OLD:")
+                                    # print(f"centroid_score={centroid_score} score_key={score_key}")
+                                    # print(f"cumulative_wass={cumulative_dict[score_key]:.4f}")
+                                    # print(f"bin_area={float(bin_area):.4f} field_count={field_count}")
+                                    # print(f"arena_size={curr_spatial_spike_train.arena_size} cylinder={cylinder}")
+                                    # print(f"ratemap_dims={curr.shape}")
+
+                                    # copy_labels, _ = _copy_labels(source_labels) #original code, throws error since it needs two arguments
+                                    copy_labels, _ = _copy_labels(source_labels, prev)
 
                                     cumulative_source_coverage, cumulative_source_area, cumulative_source_rate = compute_cumulative_blob_stats(copy_labels, prev)                  
                         
-                                    copy_labels, _ = _copy_labels(target_labels)
+                                    # copy_labels, _ = _copy_labels(target_labels)
+                                    copy_labels, _ = _copy_labels(target_labels, curr)
 
                                     cumulative_target_coverage, cumulative_target_area, cumulative_target_rate = compute_cumulative_blob_stats(copy_labels, curr)
-      
+                                    print(f"cumulative_source_coverage={cumulative_source_coverage:.4f} cumulative_source_area={cumulative_source_area:.4f} cumulative_source_rate={cumulative_source_rate:.4f}")
+                                    print(f"cumulative_target_coverage={cumulative_target_coverage:.4f} cumulative_target_area={cumulative_target_area:.4f} cumulative_target_rate={cumulative_target_rate:.4f}")
+                                    
                                     centroid_dict['cumulative_coverage'].append([cumulative_source_coverage, cumulative_target_coverage])
                                     centroid_dict['cumulative_area'].append([cumulative_source_area, cumulative_target_area])
                                     centroid_dict['cumulative_rate'].append([cumulative_source_rate, cumulative_target_rate])
@@ -580,13 +848,14 @@ def compute_remapping(study, settings, data_dir):
                                     wass_to_add = permute_dict[score_key]
 
                                     centroid_dict = _fill_centroid_dict(centroid_dict, max_centroid_count, wass_to_add, permute_dict['pairs'], permute_dict['coords'], prev, source_labels, field_sizes_prev, curr, target_labels, field_sizes_curr)
+                                   
 
                                 if settings['plotFields']:
                                     if cylinder:
                                         target_labels = flat_disk_mask(target_labels)
                                         source_labels = flat_disk_mask(source_labels)
                                     plot_fields_remapping(source_labels, target_labels, prev_spatial_spike_train, curr_spatial_spike_train, source_centroids, target_centroids, centroid_dict, data_dir, settings, cylinder=cylinder)
-
+                                
                     if prev is not None and settings['runTemporal']:
 
                         if prev_spike_times is None:
@@ -595,29 +864,42 @@ def compute_remapping(study, settings, data_dir):
                         curr_spike_times = curr_spatial_spike_train.spike_times
 
                         num_shuffles = settings['n_temporal_shuffles']
+
+                        print(f"\ninside runTemporal, OLD EMD")
+                        print(f"TEMPORAL REMAPPING: prev_spike_times n={len(prev_spike_times)} min={prev_spike_times.min():.4f} max={prev_spike_times.max():.4f}")
+                        print(f"TEMPORAL REMAPPING: curr_spike_times n={len(curr_spike_times)} min={curr_spike_times.min():.4f} max={curr_spike_times.max():.4f}")
+             
              
                         if settings['normalizeTime']:
                             prev_spike_times = (prev_spike_times - np.min(prev_spike_times)) / (np.max(prev_spike_times) - np.min(prev_spike_times))
                             curr_spike_times = (curr_spike_times - np.min(curr_spike_times)) / (np.max(curr_spike_times) - np.min(curr_spike_times))
+                            print(f"TEMPORAL after normalize: prev min={prev_spike_times.min():.4f} max={prev_spike_times.max():.4f}")
+                            print(f"TEMPORAL after normalize: curr min={curr_spike_times.min():.4f} max={curr_spike_times.max():.4f}")
 
                         observed_emd = compute_temporal_emd(prev_spike_times, curr_spike_times, settings['temporal_bin_size'], settings['end_time'])
-                        # print("OBSERVED EMD " + str(observed_emd))
+                        print(f"TEMPORAL: observed_emd={observed_emd:.4f}")
 
                         ref_emd_dist = animal_ref_dist[animal_id][ses_comp]['ref_temporal']
                         ref_emd_mean, ref_emd_std, z_score, mod_z_score, median, mad = get_reference_dist_stats(observed_emd, ref_emd_dist)
                         quantile = wasserstein_quantile(observed_emd, ref_emd_dist)
+                        print(f"TEMPORAL: ref_emd_mean={ref_emd_mean:.4f} ref_emd_std={ref_emd_std:.4f} z_score={z_score:.4f} quantile={quantile:.4f}")
+                        
 
                         prev_duration = prev_spatial_spike_train.session_metadata.session_object.get_spike_data()['spike_cluster'].duration
                         curr_duration = curr_spatial_spike_train.session_metadata.session_object.get_spike_data()['spike_cluster'].duration
                         prev_fr_rate, curr_fr_rate, fr_rate_ratio, fr_rate_change = get_rate_stats(prev_spike_times, None, curr_spike_times, None, prev_duration=prev_duration, curr_duration=curr_duration)
+                        print(f"TEMPORAL: prev_fr_rate={prev_fr_rate:.4f} curr_fr_rate={curr_fr_rate:.4f}")
+                        print(f"TEMPORAL: fr_rate_ratio={fr_rate_ratio:.4f} fr_rate_change={fr_rate_change:.4f}")
 
                         ref_rate_ratio_dist = animal_ref_dist[animal_id][ses_comp]['ref_rate_ratio']
                         fr_ratio_mean, fr_ratio_std, fr_ratio_z = get_ref_ratio_stats(ref_rate_ratio_dist, fr_rate_ratio)
                         fr_ratio_quantile = wasserstein_quantile(fr_rate_ratio, ref_rate_ratio_dist)
+                        print(f"TEMPORAL: fr_ratio_quantile={fr_ratio_quantile:.4f}")
 
                         ref_rate_change_dist = animal_ref_dist[animal_id][ses_comp]['ref_rate_change']
                         fr_change_mean, fr_change_std, fr_change_z = get_ref_change_stats(ref_rate_change_dist, fr_rate_change)
                         fr_change_quantile = wasserstein_quantile(fr_rate_change, ref_rate_change_dist)
+                        print(f"TEMPORAL: fr_change_quantile={fr_change_quantile:.4f}")
                                                 
                         temporal_dict['signature'].append([prev_path, curr_path])
                         temporal_dict['spike_count'].append([len(prev_spike_times), len(curr_spike_times)])
@@ -646,6 +928,7 @@ def compute_remapping(study, settings, data_dir):
                         temporal_dict['n_repeats'].append(len(ref_rate_ratio_dist))
                         temporal_dict['arena_size'].append([prev_spatial_spike_train.arena_size, curr_spatial_spike_train.arena_size])
                         temporal_dict['temporal_bin_size'].append(settings['temporal_bin_size'])
+             
 
                     
                     prev = curr
@@ -853,6 +1136,7 @@ def compute_remapping(study, settings, data_dir):
                                     context_dict[categ]['base_std'].append(ref_wass_std)
                                     context_dict[categ]['median'].append(median)
                                     context_dict[categ]['mad'].append(mad)
+                                    context_dict[categ]['len_ref_wass_dist'].append(len(ref_wass_dist)) #Andrew
                                     context_dict[categ]['sd_wass'].append(spike_dens_wass)
                                     context_dict[categ]['sd_z_score'].append(spike_dens_z_score)
                                     context_dict[categ]['sd_quantile'].append(sd_quantile)
@@ -997,29 +1281,25 @@ def compute_remapping(study, settings, data_dir):
                         while os.path.isfile(data_dir + '/remapping_output/regular_remapping_' + str(counter) + '.xlsx'):
                             counter += 1
                         regular_path_to_use = data_dir + '/remapping_output/regular_remapping_' + str(counter) + '.xlsx'
-                    writer = pd.ExcelWriter(regular_path_to_use, engine='openpyxl')
-                    df.to_excel(writer, sheet_name='Summary')
+                    # writer = pd.ExcelWriter(regular_path_to_use, engine='openpyxl')
+                    # df.to_excel(writer, sheet_name='Summary')
                     # writer.save()
-                    writer.close()
-                    # with pd.ExcelWriter(regular_path_to_use, engine='openpyxl') as writer:
-                    #     df.to_excel(writer, sheet_name='Summary')
+                    # writer.close()
+                    with pd.ExcelWriter(regular_path_to_use, engine='openpyxl') as writer:
+                        df.to_excel(writer, sheet_name='Summary')
+
                 else:
-                    #book = load_workbook(regular_path_to_use)
-                    #sheet = book['Summary']
-                    #startrow = sheet.max_row
-                    # with pd.ExcelWriter(regular_path_to_use, engine='openpyxl', mode='a', if_sheet_exists='overlay') as writer:
-                    #     df.to_excel(writer, sheet_name='Summary', header=False, startrow=startrow)
-                    #writer = pd.ExcelWriter(regular_path_to_use, engine='openpyxl')
-                    #writer.book = book
-                    #writer.sheets = dict((ws.title, ws) for ws in book.worksheets)
-                    #df.to_excel(writer, sheet_name='Summary', header=False, startrow=writer.sheets['Summary'].max_row)
-                    #writer.close()
-                    # book.save(regular_path_to_use)
                     book = load_workbook(regular_path_to_use)
                     sheet = book['Summary']
                     startrow = sheet.max_row
-                    with pd.ExcelWriter(regular_path_to_use, engine='openpyxl', mode='a', if_sheet_exists='overlay') as writer: df.to_excel(writer, sheet_name='Summary', header=False, startrow=startrow)
-
+                    with pd.ExcelWriter(regular_path_to_use, engine='openpyxl', mode='a', if_sheet_exists='overlay') as writer:
+                        df.to_excel(writer, sheet_name='Summary', header=False, startrow=startrow)
+                    # writer = pd.ExcelWriter(regular_path_to_use, engine='openpyxl')
+                    # writer.book = book
+                    # writer.sheets = dict((ws.title, ws) for ws in book.worksheets)
+                    # df.to_excel(writer, sheet_name='Summary', header=False, startrow=writer.sheets['Summary'].max_row)
+                    # writer.close()
+                    # book.save(regular_path_to_use)
 
             if settings['hasObject']:
                 df = pd.DataFrame(to_save['object'])
@@ -1032,25 +1312,48 @@ def compute_remapping(study, settings, data_dir):
                         while os.path.isfile(data_dir + '/remapping_output/obj_remapping_' + str(counter) + '.xlsx'):
                             counter += 1
                         obj_path_to_use = data_dir + '/remapping_output/obj_remapping_' + str(counter) + '.xlsx'
-                    writer = pd.ExcelWriter(obj_path_to_use, engine='openpyxl')
-                    # with pd.ExcelWriter(obj_path_to_use, engine='openpyxl') as writer:
-                    df.to_excel(writer, sheet_name='Summary')
+                    # writer = pd.ExcelWriter(obj_path_to_use, engine='openpyxl')
+                    with pd.ExcelWriter(obj_path_to_use, engine='openpyxl') as writer:
+                        df.to_excel(writer, sheet_name='Summary')
                     # writer.save()
-                    writer.close()
+                    # writer.close()
                 else:
                     book = load_workbook(obj_path_to_use)
                     sheet = book['Summary']
                     startrow = sheet.max_row
-                    # with pd.ExcelWriter(obj_path_to_use, engine='openpyxl', mode='a', if_sheet_exists='overlay') as writer:
-                    #     df.to_excel(writer, sheet_name='Summary', header=False, startrow=startrow)
-                    writer = pd.ExcelWriter(obj_path_to_use, engine='openpyxl')
-                    writer.book = book
-                    writer.sheets = dict((ws.title, ws) for ws in book.worksheets)
-                    df.to_excel(writer, sheet_name='Summary', header=False, startrow=writer.sheets['Summary'].max_row)
-                    writer.close()
-                    book.save(obj_path_to_use)
+                    with pd.ExcelWriter(obj_path_to_use, engine='openpyxl', mode='a', if_sheet_exists='overlay') as writer:
+                        df.to_excel(writer, sheet_name='Summary', header=False, startrow=startrow)
+                    # writer = pd.ExcelWriter(obj_path_to_use, engine='openpyxl')
+                    # writer.book = book
+                    # writer.sheets = dict((ws.title, ws) for ws in book.worksheets)
+                    # df.to_excel(writer, sheet_name='Summary', header=False, startrow=writer.sheets['Summary'].max_row)
+                    # writer.close()
+                    # book.save(obj_path_to_use)
             
             if settings['runFields']:
+                # df = pd.DataFrame(to_save['centroid'])
+                # if isStart:
+                #     path = data_dir + '/remapping_output/centroid_remapping.xlsx'
+                #     if not os.path.isfile(path):
+                #         centroid_path_to_use = path
+                #     else:
+                #         counter = 2
+                #         while os.path.isfile(data_dir + '/remapping_output/centroid_remapping_' + str(counter) + '.xlsx'):
+                #             counter += 1
+                #         centroid_path_to_use = data_dir + '/remapping_output/centroid_remapping_' + str(counter) + '.xlsx'
+                #     writer = pd.ExcelWriter(centroid_path_to_use, engine='openpyxl')
+                #     df.to_excel(writer, sheet_name='Summary')
+                #     writer.save()
+                #     writer.close()
+                # else:
+                #     book = load_workbook(centroid_path_to_use)
+                #     writer = pd.ExcelWriter(centroid_path_to_use, engine='openpyxl')
+                #     writer.book = book
+                #     writer.sheets = dict((ws.title, ws) for ws in book.worksheets)
+                #     df.to_excel(writer, sheet_name='Summary', header=False, startrow=writer.sheets['Summary'].max_row)
+                #     # writer.save()
+                #     writer.close()
+                #     book.save(centroid_path_to_use)
                 df = pd.DataFrame(to_save['centroid'])
                 if isStart:
                     path = data_dir + '/remapping_output/centroid_remapping.xlsx'
@@ -1061,19 +1364,16 @@ def compute_remapping(study, settings, data_dir):
                         while os.path.isfile(data_dir + '/remapping_output/centroid_remapping_' + str(counter) + '.xlsx'):
                             counter += 1
                         centroid_path_to_use = data_dir + '/remapping_output/centroid_remapping_' + str(counter) + '.xlsx'
-                    writer = pd.ExcelWriter(centroid_path_to_use, engine='openpyxl')
-                    df.to_excel(writer, sheet_name='Summary')
-                    # writer.save()
-                    writer.close()
+                    os.makedirs(os.path.dirname(centroid_path_to_use), exist_ok=True)
+                    with pd.ExcelWriter(centroid_path_to_use, engine='openpyxl') as writer:
+                        df.to_excel(writer, sheet_name='Summary')
                 else:
                     book = load_workbook(centroid_path_to_use)
-                    writer = pd.ExcelWriter(centroid_path_to_use, engine='openpyxl')
-                    writer.book = book
-                    writer.sheets = dict((ws.title, ws) for ws in book.worksheets)
-                    df.to_excel(writer, sheet_name='Summary', header=False, startrow=writer.sheets['Summary'].max_row)
-                    # writer.save()
-                    writer.close()
-                    book.save(centroid_path_to_use)
+                    sheet = book['Summary']
+                    startrow = sheet.max_row
+                    with pd.ExcelWriter(centroid_path_to_use, engine='openpyxl', mode='a', if_sheet_exists='overlay') as writer:
+                        df.to_excel(writer, sheet_name='Summary', header=False, startrow=startrow)
+
             if settings['runUniqueGroups']:
         
                 for context in to_save['context']:
@@ -1089,7 +1389,7 @@ def compute_remapping(study, settings, data_dir):
                             context_path_to_use = data_dir + '/remapping_output/context_' + context + '_' + str(counter) + '.xlsx'
                         writer = pd.ExcelWriter(context_path_to_use, engine='openpyxl')
                         df.to_excel(writer, sheet_name='Summary')
-                        # writer.save()
+                        writer.save()
                         writer.close()
                         context_paths[context] = context_path_to_use
                     else:
@@ -1113,26 +1413,16 @@ def compute_remapping(study, settings, data_dir):
                         while os.path.isfile(data_dir + '/remapping_output/temporal_remapping_' + str(counter) + '.xlsx'):
                             counter += 1
                         temporal_path_to_use = data_dir + '/remapping_output/temporal_remapping_' + str(counter) + '.xlsx'
-                    writer = pd.ExcelWriter(temporal_path_to_use, engine='openpyxl')
-                    # with pd.ExcelWriter(temporal_path_to_use, engine='openpyxl') as writer:
-                    df.to_excel(writer, sheet_name='Summary')
-                    # writer.save()
-                    writer.close()
+                    os.makedirs(os.path.dirname(temporal_path_to_use), exist_ok=True)
+                    with pd.ExcelWriter(temporal_path_to_use, engine='openpyxl') as writer:
+                        df.to_excel(writer, sheet_name='Summary')
                 else:
                     book = load_workbook(temporal_path_to_use)
-                    writer = pd.ExcelWriter(temporal_path_to_use, engine='openpyxl')
-                    if not any(sheet.sheet_state == 'visible' for sheet in book.worksheets):
-                        book.active.sheet_state = 'visible'
-                    # sheet = book['Summary']
-                    # startrow = sheet.max_row
-                    # with pd.ExcelWriter(temporal_path_to_use, engine='openpyxl', mode='a', if_sheet_exists='overlay') as writer:
-                    writer.book = book
-                    writer.sheets = dict((ws.title, ws) for ws in book.worksheets)
-                        # df.to_excel(writer, sheet_name='Summary', header=False, startrow=writer.sheets['Summary'].max_row)
-                        # writer.save()
-                    df.to_excel(writer, sheet_name='Summary', header=False, startrow=startrow)
-                    writer.close()
-                    # book.save(temporal_path_to_use)
+                    sheet = book['Summary']
+                    startrow = sheet.max_row
+                    with pd.ExcelWriter(temporal_path_to_use, engine='openpyxl', mode='a', if_sheet_exists='overlay') as writer:
+                        df.to_excel(writer, sheet_name='Summary', header=False, startrow=startrow)
+
             if settings['runUniqueOnlyTemporal']:
                 for context in to_save['context_temporal']:
                     df = pd.DataFrame(to_save['context_temporal'][context])
@@ -1161,7 +1451,6 @@ def compute_remapping(study, settings, data_dir):
                         book.save(context_temporal_path_to_use)
             
             isStart = False
-
     # For smae commented out block as at start of function
     # np.save(data_dir + '/control_ses1.npy', stack_dict['control']['session_1'])
     # np.save(data_dir + '/control_ses2.npy', stack_dict['control']['session_2'])
