@@ -17,7 +17,7 @@ print(PROJECT_PATH)
 from library.study_space import Session, Study, SpatialSpikeTrain2D
 from x_io.rw.axona.batch_read import make_study
 from scripts.batch_map.LEC_naming import LEC_naming_format, extract_name_lec
-from _prototypes.cell_remapping.src.masks import make_object_ratemap, check_disk_arena
+from _prototypes.cell_remapping.src.masks import make_object_ratemap #, check_disk_arena
 from library.maps.map_utils import _interpolate_matrix, disk_mask
 
 
@@ -35,6 +35,8 @@ def _find_subdir(folder_list,aid,date):
     """
     Finds the subdirectory of a given animal and date
     """
+    date = str(date)
+    aid = str(aid)
     matched_folders = []
     for folder in folder_list:
         if date in str(folder) and aid in str(folder):
@@ -49,7 +51,135 @@ def _find_subdir(folder_list,aid,date):
                 return folder 
 
 
-def main(dict_path, output_folder_path, folder_list, settings_dict):
+def main(dict_path, output_folder_path, folder_list, settings_dict, target_group='B6', target_animals=None):
+    """
+    Process cell types, generate plots, and compute average ratemaps and waveforms.
+    
+    Args:
+        target_group: Group to focus on (e.g., "B6", "ANT", "NON")
+        target_animals: List of animal names in group (e.g., ["B6-1M", "B6-2M", "B6-LEC1", "B6-LEC2"])
+    """
+    if target_animals is None:
+        target_animals = ["B6-1M", "B6-2M", "B6-LEC1", "B6-LEC2"]
+    
+    # Track missing subdirectories
+    missing_subdir_records = []
+    
+    ########################## RATEMAP STORAGE ###################
+    """
+    ratemap_storage structure:
+    {
+        'overall': {
+            'ANT': {'ratemap': np.array(32x32), 'count': int}  # All cells across all sessions/angles
+        },
+        'by_angle': {
+            'ANT_0': {'ratemap': np.array(32x32), 'count': int},    # Cells at 0° object angle
+            'ANT_90': {'ratemap': np.array(32x32), 'count': int},   # Cells at 90° object angle
+            'ANT_180': {'ratemap': np.array(32x32), 'count': int},  # Cells at 180° object angle
+            'ANT_270': {'ratemap': np.array(32x32), 'count': int},  # Cells at 270° object angle
+            'ANT_NO': {'ratemap': np.array(32x32), 'count': int}    # Cells with no object
+        },
+        'by_session': {
+            'ANT_session_1': {'ratemap': np.array(32x32), 'count': int},  # Cells in session 1
+            'ANT_session_2': {'ratemap': np.array(32x32), 'count': int},  # Cells in session 2
+            ...  # sessions 3-7
+        },
+        'by_celltype': {
+            'ANT_object': {'ratemap': np.array(32x32), 'count': int},      # Object cells only
+            'ANT_trace': {'ratemap': np.array(32x32), 'count': int},       # Trace cells only
+            'ANT_unassigned': {'ratemap': np.array(32x32), 'count': int}   # Unassigned cells
+        },
+        'by_celltype_session': {
+            'ANT_object_session_1': {'ratemap': np.array(32x32), 'count': int},  # Object cells in session 1
+            'ANT_trace_session_1': {'ratemap': np.array(32x32), 'count': int},   # Trace cells in session 1
+            ...  # All combinations of celltype × session
+        }
+    }
+    
+    Each 'ratemap' accumulates summed rate maps, 'count' tracks number of cells averaged.
+    Final average = ratemap / count
+    """
+    ratemap_storage = {
+        'overall': {},
+        'by_angle': {},
+        'by_session': {},
+        'by_celltype': {},
+        'by_celltype_session': {},
+        'by_animal': {},
+        'by_celltype_animal': {}
+    }
+    
+    # Initialize overall ratemap
+    ratemap_storage['overall'][target_group] = {'ratemap': np.zeros((32, 32), dtype=float), 'count': 0}
+    
+    # Initialize angle ratemaps
+    for angle in ['0', '90', '180', '270', 'NO']:
+        ratemap_storage['by_angle'][f'{target_group}_{angle}'] = {'ratemap': np.zeros((32, 32), dtype=float), 'count': 0}
+    
+    # Initialize session ratemaps
+    for session_num in range(1, 8):
+        ratemap_storage['by_session'][f'{target_group}_session_{session_num}'] = {'ratemap': np.zeros((32, 32), dtype=float), 'count': 0}
+    
+    # Initialize celltype ratemaps
+    for celltype in ['object', 'trace', 'unassigned']:
+        ratemap_storage['by_celltype'][f'{target_group}_{celltype}'] = {'ratemap': np.zeros((32, 32), dtype=float), 'count': 0}
+    
+    # Initialize celltype+session ratemaps
+    for celltype in ['object', 'trace', 'unassigned']:
+        for session_num in range(1, 8):
+            key = f'{target_group}_{celltype}_session_{session_num}'
+            ratemap_storage['by_celltype_session'][key] = {'ratemap': np.zeros((32, 32), dtype=float), 'count': 0}
+
+    #initialize by animal ratemaps
+    for animal in target_animals:
+        ratemap_storage['by_animal'][animal] = {'ratemap': np.zeros((32, 32), dtype=float), 'count': 0}
+
+
+    # initialize by animal and cell type ratemaps
+    for celltype in ['object', 'trace', 'unassigned']:
+        for animal in target_animals:
+            key = f'{animal}_{celltype}'
+            ratemap_storage['by_celltype_animal'][key] = {'ratemap': np.zeros((32, 32), dtype=float), 'count': 0}
+    
+    ########################## WAVEFORM STORAGE ###################
+    """
+    waveform_storage structure:
+    {
+        'ANT': {                                    # Group-level aggregation
+            0: {                                    # Channel 0 (tetrode wire 1)
+                'waveforms': np.array(200x50) or None,  # Accumulated waveforms (200 samples × 50 time points)
+                'counts': int,                          # Number of times accumulated
+                'dist': [float, ...]                    # Flattened distribution of all waveform values
+            },
+            1: { ... },  # Channel 1
+            2: { ... },  # Channel 2
+            3: { ... }   # Channel 3
+        },
+        'ANT-119a-6': {                            # Individual animal aggregation
+            0: {'waveforms': np.array(200x50) or None, 'counts': int, 'dist': [...]},
+            1: { ... },
+            2: { ... },
+            3: { ... }
+        },
+        'ANT-120-4': { ... },  # More individual animals
+        ...
+    }
+    
+    Each time waveforms are encountered:
+    - 'waveforms': accumulated by summing (average = waveforms / counts)
+    - 'counts': incremented by 1
+    - 'dist': extended with all individual sample values for distribution analysis
+    """
+    # waveform_storage = {}
+    # waveform_storage[target_group] = {}
+    # for ch in range(4):
+    #     waveform_storage[target_group][ch] = {'waveforms': None, 'counts': 0, 'dist': []}
+    
+    # for animal in target_animals:
+    #     waveform_storage[animal] = {}
+    #     for ch in range(4):
+    #         waveform_storage[animal][ch] = {'waveforms': None, 'counts': 0, 'dist': []}
+    
     ctype_dict = pd.read_pickle(dict_path)
     failed = []
     # for ctype in ['trace']:
@@ -82,13 +212,28 @@ def main(dict_path, output_folder_path, folder_list, settings_dict):
                 
 
                 settings_dict['single_tet'] = int(tetrode)
-                settings_dict['allowed_sessions'] = ['session_1', 'session_2', 'session_3']
+                settings_dict['allowed_sessions'] = None
                 
                 if True:
                     if aid == prev_aid and date == prev_date:
                         assert tetrode != prev_tetrode or cell_id != prev_cell_id, 'Duplicate cell found'
                     else:
                         subdir = _find_subdir(folder_list,aid,date)
+                        print(f"subdir found: {subdir}")
+ 
+                        if subdir is None and animal[0] == target_group:
+                            print(f"could not find subdir for {target_group} animal {aid} on date {date}")
+                            missing_subdir_records.append({
+                                'animal_group': animal[0],
+                                'animal_id': aid,
+                                'date': date,
+                                'tetrode': tetrode,
+                                'cell_id': cell_id,
+                                'expected_search_key': f"{aid}_{date}",
+                                'folder_count_searched': len(folder_list)
+                            })
+                            continue
+
                         if subdir is not None:
                             print(subdir)
                             sub_study = make_study(subdir,settings_dict=settings_dict)
@@ -143,6 +288,48 @@ def main(dict_path, output_folder_path, folder_list, settings_dict):
                         
                                         rate_obj = spatial_spike_train.get_map('rate')
                                         rate_map, rate_map_raw = rate_obj.get_rate_map(new_size=settings_dict['ratemap_dims'][0])
+
+                                        ################ ACCUMULATE RATEMAPS ################
+                                        if group == target_group:
+                                            # Overall ratemap
+                                            ratemap_storage['overall'][target_group]['ratemap'] += rate_map
+                                            ratemap_storage['overall'][target_group]['count'] += 1
+                                            
+                                            # By angle
+                                            angle_key = f'{target_group}_{angle}'
+                                            if angle_key in ratemap_storage['by_angle']:
+                                                ratemap_storage['by_angle'][angle_key]['ratemap'] += rate_map
+                                                ratemap_storage['by_angle'][angle_key]['count'] += 1
+                                            
+                                            # By session
+                                            session_key = f'{target_group}_{ses_id}'
+                                            if session_key in ratemap_storage['by_session']:
+                                                ratemap_storage['by_session'][session_key]['ratemap'] += rate_map
+                                                ratemap_storage['by_session'][session_key]['count'] += 1
+                                            
+                                            # By celltype
+                                            celltype_key = f'{target_group}_{ctype}'
+                                            if celltype_key in ratemap_storage['by_celltype']:
+                                                ratemap_storage['by_celltype'][celltype_key]['ratemap'] += rate_map
+                                                ratemap_storage['by_celltype'][celltype_key]['count'] += 1
+                                            
+                                            # By celltype and session
+                                            combined_key = f'{target_group}_{ctype}_{ses_id}'
+                                            if combined_key in ratemap_storage['by_celltype_session']:
+                                                ratemap_storage['by_celltype_session'][combined_key]['ratemap'] += rate_map
+                                                ratemap_storage['by_celltype_session'][combined_key]['count'] += 1
+
+                                            # by animal
+                                            curr_animal = animal[1]
+                                            if curr_animal in ratemap_storage['by_animal']:
+                                                ratemap_storage['by_animal'][curr_animal]['ratemap'] += rate_map
+                                                ratemap_storage['by_animal'][curr_animal]['count'] += 1
+
+                                            # by animal and cell type
+                                            combined_animal_key = f'{curr_animal}_{ctype}'
+                                            if combined_animal_key in ratemap_storage['by_celltype_animal']:
+                                                ratemap_storage['by_celltype_animal'][combined_animal_key]['ratemap'] += rate_map
+                                                ratemap_storage['by_celltype_animal'][combined_animal_key]['count'] += 1
 
                                         if cylinder:
                                             curr = flat_disk_mask(rate_map)
@@ -199,10 +386,41 @@ def main(dict_path, output_folder_path, folder_list, settings_dict):
                                 waveforms = ses_ratemap_cells[i].signal
                                 for ch_id in range(4):
                                     if ch_id != len(waveforms):
-                                        ch = waveforms[:,ch_id,:]
+                                        ch = waveforms[:,ch_id,:] # [spikes, channel, time], get all spikes at all time points for one channel
                                         idx = np.random.choice(len(ch), size=200)
-                                        waves = ch[idx, :]
+                                        full_waves = ch[:,:] # get all spikes at all time points for this channel
+                                        waves = ch[idx, :] # select 200 random spikes at all time points for this channel
                                         avg_wave = np.mean(ch, axis=0)
+
+                                        ################ ACCUMULATE WAVEFORMS ################
+                                        # animal_group = animal[0]
+                                        # animal_name = animal[1]
+                                        
+                                        # if animal_group == target_group and ch_id < 4:
+                                        #     ch_idx = ch_id
+                                            
+                                        #     # Add to group-level storage
+                                        #     if waveform_storage[target_group][ch_idx]['waveforms'] is None:
+                                        #         # waveform_storage[target_group][ch_idx]['waveforms'] = np.zeros_like(full_waves)
+                                        #         waveform_storage[target_group][ch_idx]['waveforms'] = full_waves.copy()
+                                        #     else:
+                                        #         # waveform_storage[target_group][ch_idx]['waveforms'] += full_waves
+                                        #         waveform_storage[target_group][ch_idx]['waveforms'] = np.vstack(( waveform_storage[target_group][ch_idx]['waveforms'],
+                                        #                                                                         full_waves))
+                                        #         waveform_storage[target_group][ch_idx]['counts'] += 1
+                                        #         waveform_storage[target_group][ch_idx]['dist'].extend(full_waves.ravel())
+                                                
+                                        #     # Add to per-animal storage
+                                        #     if animal_name in target_animals:
+                                        #         if waveform_storage[animal_name][ch_idx]['waveforms'] is None:
+                                        #             # waveform_storage[animal_name][ch_idx]['waveforms'] = np.zeros_like(full_waves)
+                                        #             waveform_storage[animal_name][ch_idx]['waveforms'] = full_waves.copy()
+                                        #         else:
+                                        #             # waveform_storage[animal_name][ch_idx]['waveforms'] += full_waves
+                                        #             waveform_storage[animal_name][ch_idx]['waveforms'] = np.vstack((waveform_storage[animal_name][ch_idx]['waveforms'],
+                                        #                                                                            full_waves))
+                                        #             waveform_storage[animal_name][ch_idx]['counts'] += 1
+                                        #             waveform_storage[animal_name][ch_idx]['dist'].extend(full_waves.ravel())
 
                                         ax2.plot(np.arange(int(50*ch_id+5*ch_id),int(50*ch_id+5*ch_id+50),1), ch[idx,:].T, c='grey')
                                         ax2.plot(np.arange(int(50*ch_id+5*ch_id),int(50*ch_id+5*ch_id+50),1), avg_wave, c='k', lw=2)
@@ -252,6 +470,171 @@ def main(dict_path, output_folder_path, folder_list, settings_dict):
                 # except:
                 #     failed.append(animal)
 
+    ########################## SAVE RATEMAPS ###################
+    print(f"Saving ratemaps...")
+    avg_ratemap_folder = output_folder_path + '/avg_ratemap_npy'
+    no_mask_folder = avg_ratemap_folder + '/no_mask'
+    if not os.path.isdir(avg_ratemap_folder):
+        os.mkdir(avg_ratemap_folder)
+    if not os.path.isdir(no_mask_folder):
+        os.mkdir(no_mask_folder)
+    
+    ratemap_keys = []
+    
+    # Save all ratemaps using clean loop-based approach
+    for key, data in ratemap_storage['overall'].items():
+        if data['count'] > 0:
+            avg_ratemap = data['ratemap'] / data['count']
+            unmasked_path = os.path.join(no_mask_folder, f'average_ratemap_{key}.npy')
+            np.save(unmasked_path, avg_ratemap)
+            masked_ratemap = flat_disk_mask(avg_ratemap)
+            masked_path = os.path.join(avg_ratemap_folder, f'average_ratemap_{key}.npy')
+            np.save(masked_path, masked_ratemap)
+            print(f"Saved {masked_path}")
+            ratemap_keys.append((key, data['count']))
+    
+    for key, data in ratemap_storage['by_angle'].items():
+        if data['count'] > 0:
+            avg_ratemap = data['ratemap'] / data['count']
+            unmasked_path = os.path.join(no_mask_folder, f'average_ratemap_{key}.npy')
+            np.save(unmasked_path, avg_ratemap)
+            masked_ratemap = flat_disk_mask(avg_ratemap)
+            masked_path = os.path.join(avg_ratemap_folder, f'average_ratemap_{key}.npy')
+            np.save(masked_path, masked_ratemap)
+            print(f"Saved {masked_path}")
+            ratemap_keys.append((key, data['count']))
+    
+    for key, data in ratemap_storage['by_session'].items():
+        if data['count'] > 0:
+            avg_ratemap = data['ratemap'] / data['count']
+            unmasked_path = os.path.join(no_mask_folder, f'average_ratemap_{key}.npy')
+            np.save(unmasked_path, avg_ratemap)
+            masked_ratemap = flat_disk_mask(avg_ratemap)
+            masked_path = os.path.join(avg_ratemap_folder, f'average_ratemap_{key}.npy')
+            np.save(masked_path, masked_ratemap)
+            print(f"Saved {masked_path}")
+            ratemap_keys.append((key, data['count']))
+    
+    for key, data in ratemap_storage['by_celltype'].items():
+        if data['count'] > 0:
+            avg_ratemap = data['ratemap'] / data['count']
+            unmasked_path = os.path.join(no_mask_folder, f'average_ratemap_{key}.npy')
+            np.save(unmasked_path, avg_ratemap)
+            masked_ratemap = flat_disk_mask(avg_ratemap)
+            masked_path = os.path.join(avg_ratemap_folder, f'average_ratemap_{key}.npy')
+            np.save(masked_path, masked_ratemap)
+            print(f"Saved {masked_path}")
+            ratemap_keys.append((key, data['count']))
+    
+    for key, data in ratemap_storage['by_celltype_session'].items():
+        if data['count'] > 0:
+            avg_ratemap = data['ratemap'] / data['count']
+            unmasked_path = os.path.join(no_mask_folder, f'average_ratemap_{key}.npy')
+            np.save(unmasked_path, avg_ratemap)
+            masked_ratemap = flat_disk_mask(avg_ratemap)
+            masked_path = os.path.join(avg_ratemap_folder, f'average_ratemap_{key}.npy')
+            np.save(masked_path, masked_ratemap)
+            print(f"Saved {masked_path}")
+            ratemap_keys.append((key, data['count']))
+
+    #for animal-level ratemaps
+    for key, data in ratemap_storage['by_animal'].items():
+        if data['count'] > 0:
+            avg_ratemap = data['ratemap'] / data['count']
+            unmasked_path = os.path.join(no_mask_folder, f'average_ratemap_{key}.npy')
+            np.save(unmasked_path, avg_ratemap)
+            masked_ratemap = flat_disk_mask(avg_ratemap)
+            masked_path = os.path.join(avg_ratemap_folder, f'average_ratemap_{key}.npy')
+            np.save(masked_path, masked_ratemap)
+            print(f"Saved {masked_path}")
+            ratemap_keys.append((key, data['count']))
+
+    # for animal-cell type ratemaps
+    for key, data in ratemap_storage['by_celltype_animal'].items():
+        if data['count'] > 0:
+            avg_ratemap = data['ratemap'] / data['count']
+            unmasked_path = os.path.join(no_mask_folder, f'average_ratemap_{key}.npy')
+            np.save(unmasked_path, avg_ratemap)
+            masked_ratemap = flat_disk_mask(avg_ratemap)
+            masked_path = os.path.join(avg_ratemap_folder, f'average_ratemap_{key}.npy')
+            np.save(masked_path, masked_ratemap)
+            print(f"Saved {masked_path}")
+            ratemap_keys.append((key, data['count']))
+
+    #for average group average created by averaging of animal rate maps
+    overall_avg = np.zeros((32,32), dtype=float)
+    num_animals = 0
+    for key, data in ratemap_storage['by_animal'].items():
+        if data['count'] > 0:
+            overall_avg += data['ratemap'] / data['count'] #add the average animal rate map to overall average
+            num_animals += 1
+
+    overall_avg = overall_avg / num_animals #divide by number of animals to get average of animal averages
+    unmasked_path = os.path.join(no_mask_folder, f'average_ratemap_{target_group}_animal_avg.npy')
+    np.save(unmasked_path, overall_avg)
+    masked_ratemap = flat_disk_mask(overall_avg)
+    masked_path = os.path.join(avg_ratemap_folder, f'average_ratemap_{target_group}_animal_avg.npy')
+    np.save(masked_path, masked_ratemap)
+    
+    ########################## SAVE WAVEFORMS ###################
+    # print(f"Saving waveforms...")
+    # avg_waveform_folder = output_folder_path + '/avg_waveform_npy'
+    # if not os.path.isdir(avg_waveform_folder):
+    #     os.mkdir(avg_waveform_folder)
+    
+    # waveform_keys = []
+    
+    # for entity_id in [target_group] + target_animals:
+    #     for ch_idx in range(4):
+    #         data = waveform_storage[entity_id][ch_idx]
+            
+    #         # Save averaged waveforms
+    #         if data['counts'] > 0:
+    #             # avg_waveforms = data['waveforms'] / data['counts']
+    #             avg_waveforms = np.mean(data['waveforms'], axis=0)  # Average across all accumulated waveforms
+    #             npy_path = os.path.join(avg_waveform_folder, f'{entity_id}_ch{ch_idx + 1}_waveforms.npy')
+    #             np.save(npy_path, avg_waveforms)
+    #             print(f"Saved {npy_path}")
+            
+    #         # Save distributions
+    #         if data['dist']:
+    #             dist_path = os.path.join(avg_waveform_folder, f'{entity_id}_ch{ch_idx + 1}_dist.npy')
+    #             np.save(dist_path, np.array(data['dist']))
+    #             print(f"Saved {dist_path}")
+            
+    #         # Track counts
+    #         waveform_keys.append((f'{entity_id}_ch{ch_idx + 1}', data['counts']))
+    
+    ########################## SAVE CSV COUNTS ###################
+    # Write ratemap counts to CSV
+    ratemap_counts_data = {'Ratemap Name': [], 'Ratemap Count': []}
+    for key, count in ratemap_keys:
+        ratemap_counts_data['Ratemap Name'].append(f'{key}_ratemap_count')
+        ratemap_counts_data['Ratemap Count'].append(count)
+    
+    print(f"Writing ratemap counts CSV...")
+    ratemap_counts_df = pd.DataFrame(ratemap_counts_data)
+    ratemap_counts_df.to_csv(output_folder_path + f'/{target_group}_ratemap_counts.csv', index=False)
+    
+    # # Write waveform counts to CSV
+    # waveform_counts_data = {'Waveform Name': [], 'Waveform Count': []}
+    # for key, count in waveform_keys:
+    #     waveform_counts_data['Waveform Name'].append(f'{key}_waveform_count')
+    #     waveform_counts_data['Waveform Count'].append(count)
+    
+    # print(f"Writing waveform counts CSV...")
+    # waveform_counts_df = pd.DataFrame(waveform_counts_data)
+    # waveform_counts_df.to_csv(output_folder_path + f'/{target_group}_waveform_counts.csv', index=False)
+
+    # Write missing subdirectory records to CSV
+    if missing_subdir_records:
+        print(f"Writing missing subdirectory records CSV...")
+        missing_records_df = pd.DataFrame(missing_subdir_records)
+        missing_records_df.to_csv(output_folder_path + f'/{target_group}_missing_subdir_records.csv', index=False)
+        print(f"Found {len(missing_subdir_records)} missing subdirectories")
+    else:
+        print(f"No missing subdirectories found for {target_group}")
+
     return failed
 
 
@@ -263,7 +646,7 @@ if __name__ == '__main__':
 
         'smoothing_factor': 3, # EDIT HERE
 
-        'useMatchedCut': True,  # EDIT HERE
+        'useMatchedCut': False,  # EDIT HERE
     }
 
     # Switch devices to True/False based on what is used in the acquisition (to be extended for more devices in future)
@@ -281,24 +664,32 @@ if __name__ == '__main__':
     settings_dict = STUDY_SETTINGS
 
     settings_dict['speed_lowerbound'] = 0 
-    settings_dict['speed_upperbound'] = 99
+    settings_dict['speed_upperbound'] = 100
     settings_dict['ratemap_dims'] = (32,32)
     settings_dict['disk_arena'] = True
     settings_dict['naming_type'] = 'LEC'
     settings_dict['type'] = 'object'
 
-    folder_path = r"C:\Users\aaoun\OneDrive - cumc.columbia.edu\Desktop\HussainiLab\neuroscikit_test_data\NON_sample"
+    #julian addeds
+    settings_dict['arena_size'] = None
 
-    output_folder_path = r"C:\Users\aaoun\OneDrive - cumc.columbia.edu\Desktop\HussainiLab\neuroscikit_test_data\NON_sample\output"
+    folder_path = r"z:\Users\Julian\UPDATED_BATCHSPIKE\BATCHSPIKE_OUTPUT\LEC_updated_batchspike_threshold_8\low_spike_units_removed\B6"
 
-    dict_path = r"C:\Users\aaoun\OneDrive - cumc.columbia.edu\Desktop\HussainiLab\neuroscikit\_prototypes\cell_remapping\LEC_cell_types.pkl"
+    # output_folder_path = r"e:\Julian\ANDREW_CSV\plot_cell_types_B6_animals\output"
+    output_folder_path = r"e:\Julian\plot_cell_types\duration_correct\threshold_8\output_per_group\B6"
+
+    dict_path = r"e:\Julian\plot_cell_types\duration_correct\threshold_8\input\ses123_identifier_dict_keep_swapped.pkl"
 
     # list all folders in folder_path at any level  
     folder_list = [x[0] for x in os.walk(folder_path)]
     folder_list = [x.replace('\\', '/') for x in folder_list]
 
-
-    failed = main(dict_path, output_folder_path, folder_list, settings_dict)
+    # Specify target group and animals
+    target_group = 'B6'
+    #target_animals = ['ANT-119a-6', 'ANT-120-4', 'ANT-133a-4', 'ANT-135a-7', 'ANT-140-4']
+    target_animals = ['B6-1M', 'B6-2M', 'B6-LEC1', 'B6-LEC2']
+    
+    failed = main(dict_path, output_folder_path, folder_list, settings_dict, target_group, target_animals)
 
     # print('Failed IDs')
 
