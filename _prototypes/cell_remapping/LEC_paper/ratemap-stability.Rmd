@@ -6,6 +6,7 @@ output: html_notebook
 
 
 ```{r}
+# start chunk 1
 # Install the required packages if they are not already installed
 if (!requireNamespace("readxl", quietly = TRUE)) {
   install.packages("readxl")
@@ -22,7 +23,7 @@ library(dplyr)
 # df <- readxl::read_excel('C:\\Users\\aaoun\\OneDrive - cumc.columbia.edu\\Desktop\\HussainiLab\\neuroscikit\\filtered_df.xlsx')
 # df <- readxl::read_excel('C:\\Users\\aaoun\\OneDrive - cumc.columbia.edu\\Desktop\\HussainiLab\\neuroscikit\\df_full_LEC_filtered.xlsx')
 # _only_keep.xlsx')
-df <- readxl::read_excel('C:\\Users\\aaoun\\OneDrive - cumc.columbia.edu\\Desktop\\HussainiLab\\neuroscikit\\df_full_LEC_filtered_keep_swapped2.xlsx')
+df <- readxl::read_excel('e:\\Julian\\LEC_final_figures\\duration_correct\\output\\df_full_LEC_filtered.xlsx')
 # df <- readxl::read_excel('C:\\Users\\aaoun\\OneDrive - cumc.columbia.edu\\Desktop\\HussainiLab\\neuroscikit\\df_full_LEC_assigned_keep_swapped_fixed.xlsx')
 
 # df <- readxl::read_excel('C:\\Users\\aaoun\\OneDrive - cumc.columbia.edu\\Desktop\\HussainiLab\\neuroscikit\\df_full_LEC_unfiltered.xlsx')
@@ -31,7 +32,10 @@ df <- readxl::read_excel('C:\\Users\\aaoun\\OneDrive - cumc.columbia.edu\\Deskto
 
 # df <- readxl::read_excel('C:\\Users\\aaoun\\OneDrive - cumc.columbia.edu\\Desktop\\HussainiLab\\neuroscikit\\LEC_full_merged_scores_unfiltered.xlsx')
 
-df <- df %>% filter(score == 'field')
+
+# command ot run: & "C:\Program Files\R\R-4.5.2\bin\Rscript.exe" -e "rmarkdown::render('ratemap-stability.Rmd')"     
+#JULIAN CHANGE
+df <- df %>% filter(score == 'whole')
 
 # remove where isObject = 0
 # df <- df %>% filter(isTrace == 1)
@@ -39,6 +43,7 @@ df <- df %>% filter(score == 'field')
 # remove session 4 through 7
 # df <- df %>% filter(session_id != 4 & session_id != 5 & session_id != 6 & session_id != 7)
 
+#JULIAN CHANGE
 selected_groups <- c("NON", "ANT")  # Specify the groups you want to keep
 df <- df[df$group %in% selected_groups, ]
 df$group <- factor(df$group, levels = c("NON", "ANT"))  # Reorder factor levels
@@ -81,21 +86,24 @@ for (dv in dependent_vars) {
   }
 }
 
-
+# end chunk 1
 ```
 
 ```{r}
+# start chunk 2
 #print column names
 colnames(df)
 # print df at column 'cell_type'
 # df$cell_type_numeric
 # print length an width of df
 print(dim(df))
+# end chunk 2
 ```
 
 
 
 ```{r}
+# start chunk 3
 
 # Define a function to fit a GLMM for a given dependent variable
 fit_model <- function(df, dependent_var) {
@@ -167,118 +175,131 @@ for (dependent_var in dependent_vars) {
 
 # Now, models is a list containing the models for each dependent variable,
 # and diagnostics is a similar list containing the diagnostics for each model.
+# end chunk 3
 ```
 ```{r}
-# Install required packages
-if (!requireNamespace("glmmTMB", quietly = TRUE)) {
-  install.packages("glmmTMB")
-}
+# # start chunk 4
+# # Install required packages
+# if (!requireNamespace("glmmTMB", quietly = TRUE)) {
+#   install.packages("glmmTMB")
+# }
 
-if (!requireNamespace("DHARMa", quietly = TRUE)) {
-  install.packages("DHARMa")
-}
+# if (!requireNamespace("DHARMa", quietly = TRUE)) {
+#   install.packages("DHARMa")
+# }
 
-# Load required packages
-library(glmmTMB)
-library(DHARMa)
+# # Load required packages
+# library(glmmTMB)
+# library(DHARMa)
 
-# Define a function to fit a GLMM for a given dependent variable
-fit_model2 <- function(df, dependent_var, indices) {
-  # Sample data with replacement
-  sampled_data <- df[indices, ]
+
+# # Define a function to fit a GLMM for a given dependent variable
+# fit_model2 <- function(df, dependent_var, indices) {
+#   # Sample data with replacement
+#   sampled_data <- df[indices, ]
   
-  # Define the formula string
-  formula_str <- paste(dependent_var, " ~ group + (1|name) + session_id + group:session_id + cell_type + group:cell_type + group:session_id:cell_type")
+#   # Define the formula string
+#   # julian is this the issue? comment out for now
+# #   formula_str <- paste(dependent_var, " ~ group + (1|name) + session_id + group:session_id + cell_type + group:cell_type + group:session_id:cell_type")
+#     formula_str <- paste(dependent_var, " ~ group + (1|name) + session_id + group:session_id")
+   
   
-  # Convert the formula string to a formula
-  model_formula <- as.formula(formula_str)
+#   # Convert the formula string to a formula
+#   model_formula <- as.formula(formula_str)
   
-  # Fit the model
-  if (dependent_var == 'obj_q_NO') {
-    model <- glmmTMB(model_formula, data = sampled_data, family = beta_family())
-  }
-  return(model)
-}
+#   # Fit the model
+#   if (dependent_var == 'obj_q_NO') {
+#     model <- glmmTMB(model_formula, data = sampled_data, family = beta_family())
+#   }
+#   return(model)
+# }
 
-# Specify the number of bootstrap samples
-num_bootstrap_samples <- 1000
 
-# Initialize a list to store the models
-models <- list()
-diagnostics <- list()
+# # Specify the number of bootstrap samples
+# num_bootstrap_samples <- 1000
 
-# Loop over the dependent variables and fit a model for each
-for (dependent_var in dependent_vars) {
-  # Initialize lists to store bootstrap results
-  bootstrap_models <- list()
-  bootstrap_diagnostics <- list()
+# # Initialize a list to store the models
+# models <- list()
+# diagnostics <- list()
+
+# # Loop over the dependent variables and fit a model for each
+# for (dependent_var in dependent_vars) {
+#   # Initialize lists to store bootstrap results
+#   bootstrap_models <- list()
+#   bootstrap_diagnostics <- list()
   
-  # Perform bootstrap resampling
-  for (i in 1:num_bootstrap_samples) {
-    # Generate bootstrap indices
-    bootstrap_indices <- sample(nrow(df), replace = TRUE)
+#   # Perform bootstrap resampling
+#   for (i in 1:num_bootstrap_samples) {
+#     # Generate bootstrap indices
+#     bootstrap_indices <- sample(nrow(df), replace = TRUE)
     
-    # Fit the model on the bootstrap sample
-    bootstrap_model <- fit_model2(df, dependent_var, bootstrap_indices)
+#     # Fit the model on the bootstrap sample
+#     bootstrap_model <- fit_model2(df, dependent_var, bootstrap_indices)
     
-    # Store the bootstrap model
-    bootstrap_models[[i]] <- bootstrap_model
+#     # Store the bootstrap model
+#     bootstrap_models[[i]] <- bootstrap_model
     
-    # Diagnose the bootstrap model
-    simulation_output <- simulateResiduals(fittedModel = bootstrap_model, n = 250)
-    dispersion_test <- testDispersion(simulation_output)
-    zero_inflation_test <- testZeroInflation(simulation_output)
-    outlier_test <- testOutliers(simulation_output)
+#     # Diagnose the bootstrap model
+#     simulation_output <- simulateResiduals(fittedModel = bootstrap_model, n = 250)
+#     dispersion_test <- testDispersion(simulation_output)
+#     zero_inflation_test <- testZeroInflation(simulation_output)
+#     outlier_test <- testOutliers(simulation_output)
     
-    # Store the bootstrap diagnostics
-    bootstrap_diagnostics[[i]] <- list("Simulation Output" = simulation_output,
-                                       "Dispersion Test" = dispersion_test,
-                                       "Zero Inflation Test" = zero_inflation_test,
-                                       "Outlier Test" = outlier_test)
-  }
+#     # Store the bootstrap diagnostics
+#     bootstrap_diagnostics[[i]] <- list("Simulation Output" = simulation_output,
+#                                        "Dispersion Test" = dispersion_test,
+#                                        "Zero Inflation Test" = zero_inflation_test,
+#                                        "Outlier Test" = outlier_test)
+#   }
   
-  # Store the bootstrap results in the main lists
-  models[[dependent_var]] <- bootstrap_models
-  diagnostics[[dependent_var]] <- bootstrap_diagnostics
-}
+#   # Store the bootstrap results in the main lists
+#   models[[dependent_var]] <- bootstrap_models
+#   diagnostics[[dependent_var]] <- bootstrap_diagnostics
+# }
 
 # Now, models is a list containing lists of models for each dependent variable (one list per bootstrap sample),
 # and diagnostics is a similar list containing lists of diagnostics for each model.
 
+# end chunk 4
 ```
 ```{r}
-# Assuming df and dependent_var are already defined
-original_model <- fit_model(df, dependent_var)
-# get grouop:ANT coefficient
-original_coefficients <- summary(model)$coefficients$cond[, 1]
+# # start chunk 5
+# # Assuming df and dependent_var are already defined
+# original_model <- fit_model(df, dependent_var)
+# # get grouop:ANT coefficient
+# original_coefficients <- summary(model)$coefficients$cond[, 1]
 
-# Assuming you have already run the bootstrap resampling code
-# bootstrap_coefficients <- lapply(models[[dependent_var]], coef)
-bootstrap_coefficients <- lapply(models[[dependent_var]], function(model) {
-  return(summary(model)$coefficients$cond[, 1])
-})
+# # Assuming you have already run the bootstrap resampling code
+# # bootstrap_coefficients <- lapply(models[[dependent_var]], coef)
+# bootstrap_coefficients <- lapply(models[[dependent_var]], function(model) {
+#   return(summary(model)$coefficients$cond[, 1])
+# })
 
-# Calculate p-values for each coefficient
-p_values <- sapply(names(original_coefficients), function(var) {
-  original_coef <- original_coefficients[var]
-  bootstrap_coefs <- sapply(bootstrap_coefficients, function(boot_coef) boot_coef[var])
+# # Calculate p-values for each coefficient
+# p_values <- sapply(names(original_coefficients), function(var) {
+#   original_coef <- original_coefficients[var]
+#   bootstrap_coefs <- sapply(bootstrap_coefficients, function(boot_coef) boot_coef[var])
   
-  # Calculate the proportion of bootstrap coefficients more extreme than the original coefficient
-  p_value <- mean(abs(bootstrap_coefs) >= abs(original_coef))
+#   # Calculate the proportion of bootstrap coefficients more extreme than the original coefficient
+#   p_value <- mean(abs(bootstrap_coefs) >= abs(original_coef))
   
-  return(p_value)
-})
+#   return(p_value)
+# })
 
-# Print p-values for each coefficient
-print("P-values for each coefficient:")
-print(p_values)
+# # Print p-values for each coefficient
+# print("P-values for each coefficient:")
+# print(p_values)
 
+# end chunk 5
 ```
 ```{r}
+# start chunk 6
 print(summary(model))
 
+# end chunk 6
 ```
 ```{r}
+# start chunk 7
 
 # original_coefficients <- summary(model)$coefficients$cond[, 1]
 
@@ -317,8 +338,10 @@ print(summary(model))
 # boxplot(Estimate ~ Variable, data = plot_data, col = c("red", "lightblue"),
 #         main = "Distribution of Coefficients", ylab = "Estimate")
 
+# end chunk 7
 ```
 ```{r}
+# start chunk 8
 # Function to create the summary table
 create_summary_table <- function(models, diagnostics) {
   # Initialize a data frame to store the results
@@ -410,10 +433,13 @@ summary_table <- create_summary_table(models, diagnostics)
 print(summary_table)
 # to dataframe
 summary_table <- as.data.frame(summary_table)
-# write.csv(summary_table, "./testing1234.csv")
+#JULIAN CHANGE
+write.csv(summary_table, "./summary_tables/whole_NONvsANT_summary_table.csv")
+# end chunk 8
 ```
 
 ```{r}
+# start chunk 9
 
 # Assuming 'model' is your fitted beta regression model
 fitted_values <- predict(model, type = "response")
@@ -423,9 +449,11 @@ observed_values <- df$obj_q_NO
 plot(fitted_values, observed_values, main = "Model Fit", xlab = "Fitted Values", ylab = "Observed Values")
 abline(a = 0, b = 1, col = "red")  # Diagonal line for reference
 
+# end chunk 9
 ```
 
 ```{r}
+# start chunk 10
 
 # Assuming 'model' is your fitted beta regression model
 library(MASS)  # For the truehist function
@@ -447,10 +475,13 @@ par(mfrow = c(1, 2))
 truehist(residuals, main = "Histogram of Residuals", col = "lightblue")
 qqnorm(residuals, main = "Q-Q Plot")
 qqline(residuals, col = 2)
+# end chunk 10
 ```
 
 
 ```{r}
+
+# start chunk 11
 
 # Loop over the dependent variables
 for (dependent_var in names(models)) {
@@ -467,16 +498,21 @@ for (dependent_var in names(models)) {
   print(diagnostics[[dependent_var]]$`Zero Inflation Test`)
   print(diagnostics[[dependent_var]]$`Outlier Test`)
 }
+# end chunk 11
+
 
 
 
 ```
 
 ```{r}
-print(est$cond)
+# start chunk 12
+# print(est$cond)
+# end chunk 12
 ```
 
 ```{r}
+# start chunk 13
 # Initialize an empty data frame
 results <- data.frame()
 # Loop over the models
@@ -515,11 +551,14 @@ for (var in names(models)) {
   ))
 }
 # Print the results
-# write.csv(results, "./LEC_model_report/NONvsANT_quantile_indiv_beta_field.csv")
+#JULIAN CHANGE
+write.csv(results, "./LEC_model_report/NONvsANT_quantile_indiv_beta_whole.csv")
 print(results)
+# end chunk 13
 ```
 
 ```{r}
+# start chunk 14
 # Check if there are any NA or missing values
 sum(is.na(results$OddsRatio))
 sum(is.na(results$OR_CI_lower))
@@ -530,10 +569,12 @@ class(results$OddsRatio)
 class(results$OR_CI_lower)
 class(results$OR_CI_upper)
 
+# end chunk 14
 ```
 
 
 ```{r}
+# start chunk 15
 # Load the necessary library
 library(ggplot2)
 
@@ -562,6 +603,7 @@ for (var in unique(results$DependentVariable)) {
 }
 
 
+# end chunk 15
 ```
 
 
@@ -569,12 +611,14 @@ for (var in unique(results$DependentVariable)) {
 
 
 ```{r}
+# start chunk 16
 # Load the necessary library
 library(knitr)
 
 # Create the markdown table
 results %>%
   kable(format = "markdown")
+# end chunk 16
 ```
 
 
@@ -590,6 +634,7 @@ results %>%
 
 
 ```{r}
+# start chunk 17
 # Load necessary library
 library(ggplot2)
 
@@ -622,6 +667,7 @@ shapiro.test(df$obj_w[df$group == "ANT"])
 shapiro.test(df$firing_rate[df$group == "B6"])
 shapiro.test(df$firing_rate[df$group == "ANT"])
 
+# end chunk 17
 ```
 
 ```{r}
