@@ -640,6 +640,22 @@ def main(dict_path, output_folder_path, folder_list, settings_dict, target_group
 
 if __name__ == '__main__':
 
+    """
+    Entry point for running this script directly.
+
+    How to use this block:
+    1. Edit STUDY_SETTINGS and SESSION_SETTINGS to match your dataset.
+    2. Set folder_path to the root data directory to scan.
+    3. Set output_folder_path to where figures, NPY files, and CSV outputs should be written.
+    4. Set dict_path to the pickled cell-type dictionary used by main().
+    5. Choose target_group and target_animals for the cohort to process.
+    6. Run the script (for example: python plot_cell_types.py).
+
+    Notes:
+    - This block only executes when the file is run directly.
+    - If imported as a module, main() is available but this configuration does not run.
+    """
+
     STUDY_SETTINGS = {
 
         'ppm': 485,  # EDIT HERE
@@ -686,6 +702,7 @@ if __name__ == '__main__':
 
     # Specify target group and animals
     target_group = 'B6'
+    # target_group = "ANT"
     #target_animals = ['ANT-119a-6', 'ANT-120-4', 'ANT-133a-4', 'ANT-135a-7', 'ANT-140-4']
     target_animals = ['B6-1M', 'B6-2M', 'B6-LEC1', 'B6-LEC2']
     
